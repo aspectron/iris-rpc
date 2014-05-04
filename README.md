@@ -1,4 +1,4 @@
 zetta-rpc
 =========
 
-JSON RPC utilities that reside on top of TLS
+# Zetta Toolkit: JSON RPC over TLS
