@@ -58,6 +58,7 @@ function Client(options) {
     self.address = options.address.split(':');
     self.infoObject = { }
     self.pingFreq = options.pingFreq || 3 * 1000;
+    self.sequence = 0;
     self.verbose = options.verbose || zetta_rpc_default_verbose;
 
     if(self.verbose)
@@ -123,9 +124,12 @@ function Client(options) {
         });
     }
 
-    self.dispatch = function (msg) {
+    self.dispatch = function (_msg) {
         if (!self.connected || !self.auth)
             return false;
+        var msg = _.clone(_msg);
+        msg.sig = crypto.createHmac('sha256', options.auth).update(self.sequence+'').digest('hex').substring(0, 16);
+        self.sequence++;
         self.stream.write(JSON.stringify(msg) + '\n');
         return true;
     }
@@ -143,6 +147,7 @@ function Client(options) {
             var auth = crypto.createHmac('sha256', options.auth).update(vector).digest('hex');
             self.auth = true;
             self.dispatch({ op : 'auth', auth : auth, node : options.node, designation : options.designation });
+            self.sequence = parseInt(auth.substring(0, 8), 16);
             return;
         }
 
@@ -299,6 +304,8 @@ function Server(options, init_callback) { // port, certificates) {
             stream.__node__ = msg.node;
             stream.__designation__ = msg.designation;
             stream.__client_id__ = msg.designation+'-'+msg.node;
+            stream.__sequence__ = parseInt(auth.substring(0, 8), 16);
+
 
             //if(self.verbose)
             //    console.log("zetta-rpc auth success:",msg);
@@ -316,6 +323,14 @@ function Server(options, init_callback) { // port, certificates) {
             stream.end();
             return;
         }
+
+        var sig = crypto.createHmac('sha256', options.auth).update(stream.__sequence__+'').digest('hex').substring(0, 16);
+        if(msg.sig != sig) {
+            console.log("zetta-rpc signature failure:", msg);
+            stream.end();
+            return;
+        }
+        stream.__sequence__++;
 
         msg.node = stream.__node__;
         msg.designation = stream.__designation__;
