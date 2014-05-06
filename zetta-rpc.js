@@ -1,7 +1,7 @@
 //
 // -- Zetta Toolkit - JSON RPC over TLS
 //
-//  Copyright (c) 2011-2014 ASPECTRON Inc.
+//  Copyright (c) 2014 ASPECTRON Inc.
 //  All Rights Reserved.
 //
 //  Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -72,7 +72,7 @@ function Client(options) {
     self.buffer = '';
     self.address = options.address.split(':');
     self.infoObject = { }
-    self.pingFreq = options.pingFreq || 3 * 1000;
+    self.pingFreq = options.pingFreq || 0, // 3 * 1000;
     self.sequence = 0;
     self.verbose = options.verbose || zetta_rpc_default_verbose;
     self.pk = crypto.createHash('sha512').update(options.auth).digest('hex');

@@ -85,3 +85,8 @@ rpc.dispatch(cid, { op : 'user-message' })
 rpc.digest(function(msg, cid [, designation, node, stream]) { ... })
 ```
 
+### License
+
+This library is a part of Zetta Toolkit, released under MIT license.
+Copyright (c) 2014 ASPECTRON Inc.
+All Rights Reserved.
