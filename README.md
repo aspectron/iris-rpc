@@ -10,7 +10,7 @@ This library offers clear-text JSON RPC over TLS with optional second layer encr
 - Uses TLS (SSL) for data transport
 - HMAC based authentication against user-supplied secret
 - Optional message signing against MITM attacks
-- Optional 2nd layer message encryption (aes-256-cbc by default, if enabled)
+- Optional second layer message encryption (aes-256-cbc by default, if enabled)
 
 Authentication is based on user supplied secret keys, so this is as secure as your host.
 
