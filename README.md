@@ -25,7 +25,7 @@ Zetta RPC library allows sending of JSON objects between client and server. If t
 
 ### Client
 
-```
+```javascript
 var zrpc = require('zetta-rpc');
 
 var rpc = new zrpc.Multiplexer({		// or zrpc.Client() for connection to a single server
@@ -58,7 +58,7 @@ zrpc.Multiplexer() and zrpc.Client() provide same initialization interface. Mult
 
 ### Server
 
-```
+```javascript
 var zrpc = require('zetta-rpc');
 
 var rpc = new zrpc.Server({
@@ -87,6 +87,6 @@ rpc.digest(function(msg, cid [, designation, node, stream]) { ... })
 
 ### License
 
-This library is a part of Zetta Toolkit, released under MIT license.
-Copyright (c) 2014 ASPECTRON Inc.
+This library is a part of Zetta Toolkit, released under MIT license. 
+Copyright (c) 2014 ASPECTRON Inc. 
 All Rights Reserved.
