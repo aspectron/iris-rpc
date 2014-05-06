@@ -10,13 +10,18 @@ This library offers clear-text JSON RPC over TLS with optional second layer encr
 - Uses TLS (SSL) for data transport
 - HMAC based authentication against user-supplied secret
 - Optional message signing against MITM attacks
-- Optional message encryption (aes-256-cbc by default)
+- Optional 2nd layer message encryption (aes-256-cbc by default, if enabled)
 
 Authentication is based on user supplied secret keys, so this is as secure as your host.
 
 ## Usage
 
 `npm install zetta-rpc`
+
+
+### Messaging
+
+Zetta RPC library allows sending of JSON objects between client and server. If these JSON objects contain an opcode (`op` field), they will be emitted to the registered event listeners as well as on the RPC objects themselves (Client, Server and Multiplexer).  If `op` field is missing, `rpc.digest(function(msg) { ... })` must be used to capture transmission of incoming JSON objects.
 
 ### Client
 
@@ -31,14 +36,22 @@ var rpc = new zrpc.Multiplexer({		// or zrpc.Client() for connection to a single
     designation: 'user application-id',	// name of the application (used to differentiate connections coming from the same host)
     ping: true,							// optional: enable automatic server ping (see Client::setPingDataObject())
     pingFreq : 3 * 1000,				// optional: ping frequency (default 3 seconds)
-    cipher: 'aes-256-cbc',				// optional: enable cipher algorithm for 2nd layer encryption (default 'aes-256-cbc')
+    cipher: true,						// optional: 'true' or name of cipher algorithm for 2nd layer encryption 
+    									// (default 'aes-256-cbc' if true)
     signatures: true					// optional: enable message signing
 });
 
 rpc.setPingDataObject(pingDataObject);	// this object will be transmitted during ping
 rpc.registerListener(eventEmitter);		// register event emitter that will receive messages
 
-eventEmitter.on('user-message', function(msg, rpc) { ... })
+// receive messages
+eventEmitter.on('user-message', function(msg, rpc) { ... })	
+
+// send messages or JSON objects
+rpc.dispatch({ op : 'user-message ', ... })	
+
+// receive JSON
+rpc.digest(function(msg, rpc) { ... })
 
 ```
 zrpc.Multiplexer() and zrpc.Client() provide same initialization interface. Multiplexer, however, supports an array of addresses allowing client to connect to multiple servers simultaneously.
@@ -56,6 +69,19 @@ var rpc = new zrpc.Server({
 	console.log('zetta-rpc server is listening for new connections');
 });
 
-rpc.on('user-message', function(msg) { ... })
+// client connection event: cid is a unique remote end-point identifier (built from designation+node)
+rpc.on('connect', function(address, cid, designation, node, stream) { ... })
+
+// client disconnection event
+rpc.on('disconnect', function(cid, stream) { ... })
+
+// receive messages
+rpc.on('user-message', function(msg, cid [, designation, node, stream]) { ... })
+
+// send messages
+rpc.dispatch(cid, { op : 'user-message' })
+
+// receive JSON objects (without 'op' field)
+rpc.digest(function(msg, cid [, designation, node, stream]) { ... })
 ```
 

@@ -200,7 +200,7 @@ function Client(options) {
             delete msg._sig;
         }
 
-        emit(msg.op, msg, self);
+        msg.op && emit(msg.op, msg, self);
         self.digestCallback && self.digestCallback(msg, self);
     }
 
@@ -455,7 +455,7 @@ function Server(options, init_callback) { // port, certificates) {
 
         try {
             self.digestCallback && self.digestCallback(msg, stream.__client_id__, stream.__designation__, stream.__node__, stream);
-            self.emit(msg.op, msg, stream.__client_id__, stream.__designation__, stream.__node__, stream);
+            msg.op && self.emit(msg.op, msg, stream.__client_id__, stream.__designation__, stream.__node__, stream);
         } catch(ex) {
             console.error("zetta-rpc: error while processing message".magenta.bold);
             console.error(ex.stack);
