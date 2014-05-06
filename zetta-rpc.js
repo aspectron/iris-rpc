@@ -36,7 +36,7 @@ if(!GLOBAL.dpc)
     GLOBAL.dpc = function(t,fn) { if(typeof(t) == 'function') setTimeout(t,0); else setTimeout(fn,t); }
 
 var zetta_rpc_default_verbose = true;
-var zetta_rpc_default_cipher = 'aes-256-cbc';
+var zetta_rpc_default_cipher = false;
 
 function encrypt(text, cipher, key){
     var cipher = crypto.createCipher(cipher, key)
@@ -78,6 +78,8 @@ function Client(options) {
     self.pk = crypto.createHash('sha512').update(options.auth).digest('hex');
     self.signatures = options.signatures || true;
     self.cipher = options.cipher || zetta_rpc_default_cipher;
+    if(self.cipher === true)
+        self.cipher = 'aes-256-cbc';
 
     if(self.verbose)
         console.log("zetta-rpc connecting to address:", self.address);
@@ -296,7 +298,7 @@ function Multiplexer(options) {
         })
     }
 
-    self.setPingInfoObject = function(o) {
+    self.setPingDataObject = function(o) {
         _.each(self.servers, function (server) {
             server.setPingDataObject(o);
         })
