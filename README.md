@@ -1,6 +1,3 @@
-zetta-rpc
-=========
-
 # Zetta Toolkit: JSON RPC over TLS
 
 This library offers clear-text JSON RPC over TLS with optional second layer encryption.
