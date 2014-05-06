@@ -36,6 +36,21 @@ if(!GLOBAL.dpc)
     GLOBAL.dpc = function(t,fn) { if(typeof(t) == 'function') setTimeout(t,0); else setTimeout(fn,t); }
 
 var zetta_rpc_default_verbose = true;
+var zetta_rpc_default_cipher = 'aes-256-cbc';
+
+function encrypt(text, cipher, key){
+    var cipher = crypto.createCipher(cipher, key)
+    var crypted = cipher.update(text, 'utf8', 'hex')
+    crypted += cipher.final('hex');
+    return crypted;
+}
+ 
+function decrypt(text, cipher, key){
+    var decipher = crypto.createDecipher(cipher, key)
+    var dec = decipher.update(text,'hex', 'utf8')
+    dec += decipher.final('utf8');
+    return dec;
+}
 
 function Client(options) {
     var self = this;
@@ -52,7 +67,7 @@ function Client(options) {
     if(!options.auth)
         throw new Error("zetta-rpc::Client requires key argument");
 
-
+    self.listeners = [ self ]
     self.connected = false;
     self.buffer = '';
     self.address = options.address.split(':');
@@ -60,6 +75,9 @@ function Client(options) {
     self.pingFreq = options.pingFreq || 3 * 1000;
     self.sequence = 0;
     self.verbose = options.verbose || zetta_rpc_default_verbose;
+    self.pk = crypto.createHash('sha512').update(options.auth).digest('hex');
+    self.signatures = options.signatures || true;
+    self.cipher = options.cipher || zetta_rpc_default_cipher;
 
     if(self.verbose)
         console.log("zetta-rpc connecting to address:", self.address);
@@ -96,10 +114,14 @@ function Client(options) {
                 var msg = self.buffer.substring(0, idx);
                 self.buffer = self.buffer.substring(idx + 1);
                 try {
+
+                    if(self.auth && self.cipher)
+                        msg = decrypt(msg, self.cipher, self.pk);
+
                     digest(JSON.parse(msg));
                 }
                 catch (ex) {
-                    console.log(ex);
+                    console.log(ex.stack);
                     self.stream.end();
                 }
             }
@@ -109,10 +131,12 @@ function Client(options) {
             if(self.verbose && self.connected)
                 console.log("zetta-rpc tls stream error:", err.message);
 
+            if(self.connected)
+                emit('disconnect', self.stream);
+
             self.connected = false;
             self.auth = false;
             dpc(1000, connect);
-            self.emit('disconnect', self.stream);
         });
         self.stream.on('end', function () {
             if(self.verbose)
@@ -120,18 +144,8 @@ function Client(options) {
             self.connected = false;
             self.auth = false;
             dpc(1000, connect);
-            self.emit('disconnect', self.stream);
+            emit('disconnect', self.stream);
         });
-    }
-
-    self.dispatch = function (_msg) {
-        if (!self.connected || !self.auth)
-            return false;
-        var msg = _.clone(_msg);
-        msg.sig = crypto.createHmac('sha256', options.auth).update(self.sequence+'').digest('hex').substring(0, 16);
-        self.sequence++;
-        self.stream.write(JSON.stringify(msg) + '\n');
-        return true;
     }
 
     function digest(msg) {
@@ -144,52 +158,120 @@ function Client(options) {
                 return;
             }
 
-            var auth = crypto.createHmac('sha256', options.auth).update(vector).digest('hex');
+            var auth = crypto.createHmac('sha256', self.pk).update(vector).digest('hex');
             self.auth = true;
-            self.dispatch({ op : 'auth', auth : auth, node : options.node, designation : options.designation });
-            self.sequence = parseInt(auth.substring(0, 8), 16);
+
+            var msg = {
+                op : 'auth',
+                cipher : self.cipher ? encrypt(self.cipher, 'aes-256-cbc', self.pk) : false,
+            }
+
+            var data = { 
+                op : 'auth', 
+                auth : auth, 
+                signatures : self.signatures, 
+                node : options.node, 
+                designation : options.designation 
+            }
+
+            msg.data = self.cipher ? encrypt(JSON.stringify(data), 'aes-256-cbc', self.pk) : data;
+
+            writeJSON(msg);
+
+            if(self.signatures) {
+                var seq_auth = crypto.createHmac('sha1', self.pk).update(vector).digest('hex');
+                self.sequenceTX = parseInt(seq_auth.substring(0, 8), 16);
+                self.sequenceRX = parseInt(seq_auth.substring(8, 16), 16);
+            }
+
             return;
         }
 
-        self.digestCallback && self.digestCallback(msg);
-        self.emit('message', msg, stream);
+        if(self.signatures) {
+            var sig = crypto.createHmac('sha256', self.pk).update(self.sequenceRX+'').digest('hex').substring(0, 16);
+            if(msg._sig != sig) {
+                console.log("zetta-rpc signature failure:", msg);
+                self.stream.end();
+                return;
+            }
+            self.sequenceRX++;
+            delete msg._sig;
+        }
+
+        emit(msg.op, msg, self);
+        self.digestCallback && self.digestCallback(msg, self);
+    }
+
+    function emit() {
+        var args = arguments;
+        _.each(self.listeners, function(listener) {
+            try {
+                listener.emit.apply(listener, arguments);
+            } catch(ex) {
+                console.error("zetta-rpc: error while processing message".magenta.bold);
+                console.error(ex.stack);
+            }
+        })
     }
 
     self.digest = function(callback) {
         self.digestCallback = callback;
     }
 
+    self.registerListener = function(listener) {
+        self.listeners.push(listener);
+    }
 
-//    self.digest = function (msg) {
-//        core.emit(msg.op, msg);
-//    }
+    function writeJSON(msg) {
+        if (!self.connected || !self.auth)
+            return false;
+        self.stream.write(JSON.stringify(msg) + '\n');
+        return true;
+    }
 
-    self.setInfoObject = function(o) {
-        self.infoObject = o;
+    self.dispatch = function (_msg, callback) {
+        if (!self.connected || !self.auth)
+            return false;
+
+        var msg = _msg;
+
+        if(self.signatures) {
+            msg = _.clone(_msg);
+            msg._sig = crypto.createHmac('sha256', self.pk).update(self.sequenceTX+'').digest('hex').substring(0, 16);
+            self.sequenceTX++;
+        }
+
+        var text = JSON.stringify(msg);
+        if(self.cipher)
+            text = encrypt(text, self.cipher, self.pk);
+        self.stream.write(text + '\n', callback);
+        return true;
+    }
+
+    self.setPingDataObject = function(o) {
+        self.pingDataObject = o;
     }
 
     function ping() {
-//        if(!self.infoObject.nid)
-//            self.infoObject.nid = core.node_id;
-        self.dispatch(self.infoObject);
+        self.dispatch({ op : 'ping', data : self.pingDataObject});
         dpc(self.pingFreq, ping);
     }
 
     dpc(connect);
 
-    if(options.ping) {
+    if(options.ping || options.pingFreq) {
         dpc(function () {
             ping();
         })
     }
-
 }
 
 util.inherits(Client, events.EventEmitter);
 
 
-function Multiplexer(options) { //address_list, certificate_path, node_id, designation) {
+function Multiplexer(options) {
     var self = this;
+    events.EventEmitter.call(this);
     self.servers = { }
 
     if(_.isArray(options.address)) {
@@ -199,6 +281,7 @@ function Multiplexer(options) { //address_list, certificate_path, node_id, desig
             clientOptions.address = address;
             console.log("init rpc @" + clientOptions.address.bold);
             self.servers[clientOptions.address] = new Client(clientOptions);
+            self.servers[clientOptions.address].registerListener(self);
         })
     }
     else {
@@ -213,9 +296,9 @@ function Multiplexer(options) { //address_list, certificate_path, node_id, desig
         })
     }
 
-    self.setInfoObject = function(o) {
+    self.setPingInfoObject = function(o) {
         _.each(self.servers, function (server) {
-            server.setInfoObject(o);
+            server.setPingDataObject(o);
         })
     }
 
@@ -224,8 +307,15 @@ function Multiplexer(options) { //address_list, certificate_path, node_id, desig
             server.digest(callback);
         })
     }
+
+    self.registerListener = function(listener) {
+        _.each(self.servers, function (server) {
+            server.registerListener(listener);
+        })
+    }
 }
 
+util.inherits(Multiplexer, events.EventEmitter);
 
 function Server(options, init_callback) { // port, certificates) {
 	var self = this;
@@ -234,6 +324,7 @@ function Server(options, init_callback) { // port, certificates) {
 	self.streams = { };
 	self.connectionCount = 0;
     self.verbose = options.verbose || zetta_rpc_default_verbose;
+    self.pk = crypto.createHash('sha512').update(options.auth).digest('hex');
 
     self.server = tls.createServer(options.certificates, function (stream) {
         var buffer = '';
@@ -250,10 +341,12 @@ function Server(options, init_callback) { // port, certificates) {
                 var msg = buffer.substring(0, idx);
                 buffer = buffer.substring(idx + 1);
                 try {
+                    if(stream.__cipher__)
+                        msg = decrypt(msg, stream.__cipher__, self.pk);
                     digest(JSON.parse(msg), stream);
                 }
                 catch (ex) {
-                    console.log(ex);
+                    console.log(ex.stack);
                     stream.end();
                 }
             }
@@ -279,41 +372,64 @@ function Server(options, init_callback) { // port, certificates) {
     });
 
     function digest(msg, stream) {
-// console.log(msg);
+
         if(msg.op == 'auth-request') {
-            var vector = crypto.createHash('sha256').update(JSON.stringify(Date.now()+'-'+Math.random())).digest('hex');
+            var vector = crypto.createHash('sha512').update(crypto.randomBytes(512)).digest('hex');
             stream.__vector__ = vector;
             stream.write(JSON.stringify({ op : 'auth', vector : vector })+'\n');
             return;
         }
 
         if(msg.op == 'auth') {
-            if(!msg.node || !msg.designation || !msg.auth) {
-                console.log("zetta-rpc auth packet missing auth, node or designation:", msg);
+            try {
+
+                var data = msg.data;
+                if(!data) {
+                    console.log("zetta-rpc auth packet missing data:", msg);
+                    stream.end();
+                    return;
+                }
+
+                if(msg.cipher) {
+                    stream.__cipher__ = decrypt(msg.cipher, 'aes-256-cbc', self.pk);
+                    data = JSON.parse(decrypt(data, stream.__cipher__, self.pk));
+                }
+
+                if(!data.node || !data.designation || !data.auth) {
+                    console.log("zetta-rpc auth packet missing auth, node or designation:", msg);
+                    stream.end();
+                    return;
+                }
+
+                var auth = crypto.createHmac('sha256', self.pk).update(stream.__vector__).digest('hex');
+                if(auth != data.auth) {
+                    console.log("zetta-rpc auth failure:", data);
+                    stream.end();
+                    return;
+                }
+
+                stream.__node__ = data.node;
+                stream.__designation__ = data.designation;
+                stream.__client_id__ = data.designation+'-'+data.node;
+                stream.__signatures__ = data.signatures;
+
+                if(stream.__signatures__) {
+                    var sig_auth = crypto.createHmac('sha1', self.pk).update(stream.__vector__).digest('hex');
+                    stream.__sequenceRX__ = parseInt(sig_auth.substring(0, 8), 16);
+                    stream.__sequenceTX__ = parseInt(sig_auth.substring(8, 16), 16);
+                }
+
+            }
+            catch(ex) {
+                console.log("generic failure during auth:", ex.stack);
                 stream.end();
                 return;
             }
-
-            var auth = crypto.createHmac('sha256', options.auth).update(stream.__vector__).digest('hex');
-            if(auth != msg.auth) {
-                console.log("zetta-rpc auth failure:", msg);
-                stream.end();
-                return;
-            }
-
-            stream.__node__ = msg.node;
-            stream.__designation__ = msg.designation;
-            stream.__client_id__ = msg.designation+'-'+msg.node;
-            stream.__sequence__ = parseInt(auth.substring(0, 8), 16);
-
-
-            //if(self.verbose)
-            //    console.log("zetta-rpc auth success:",msg);
 
             self.streams[stream.__client_id__] = stream;
 
             self.connectionCount++;
-            self.emit('connect', stream, msg.designation, msg.node, stream.servername, stream.__client_id__);
+            self.emit('connect', stream.servername, stream.__client_id__, stream.__designation__, stream.__node__, stream);
 
             return;
         }
@@ -324,31 +440,51 @@ function Server(options, init_callback) { // port, certificates) {
             return;
         }
 
-        var sig = crypto.createHmac('sha256', options.auth).update(stream.__sequence__+'').digest('hex').substring(0, 16);
-        if(msg.sig != sig) {
-            console.log("zetta-rpc signature failure:", msg);
-            stream.end();
-            return;
+        if(stream.__signatures__) {
+            var sig = crypto.createHmac('sha256', self.pk).update(stream.__sequenceRX__+'').digest('hex').substring(0, 16);
+            if(msg._sig != sig) {
+                console.log("zetta-rpc signature failure:", msg);
+                stream.end();
+                return;
+            }
+            stream.__sequenceRX__++;
+            delete msg._sig;
         }
-        stream.__sequence__++;
 
-        msg.node = stream.__node__;
-        msg.designation = stream.__designation__;
-        self.digestCallback(msg, stream, stream.__client_id__);
+        try {
+            self.digestCallback && self.digestCallback(msg, stream.__client_id__, stream.__designation__, stream.__node__, stream);
+            self.emit(msg.op, msg, stream.__client_id__, stream.__designation__, stream.__node__, stream);
+        } catch(ex) {
+            console.error("zetta-rpc: error while processing message".magenta.bold);
+            console.error(ex.stack);
+        }
     }
 
     function disconnect(stream) {
         self.connectionCount--;
         delete self.streams[stream.__client_id__];
-        self.emit('disconnect', stream, stream.__client_id__);
+        self.emit('disconnect', stream.__client_id__, stream);
     }
 
-    self.dispatch = function(designation, node, msg, callback) {
-        var client_id = designation+'-'+node;
-        var stream = self.streams[client_id];
-        if(!stream)
+    self.dispatch = function (cid, _msg, callback) {
+        var stream = self.streams[cid];
+        if(!stream) {
+            console.error('zetta-rpc: no such stream present:'.magenta.bold,cid);
             return false;
-        stream.write(JSON.stringify(msg) + '\n');
+        }
+
+        var msg = _msg;
+
+        if(stream.__signatures__) {
+            msg = _.clone(_msg);
+            msg._sig = crypto.createHmac('sha256', self.pk).update(stream.__sequenceTX__+'').digest('hex').substring(0, 16);
+            stream.__sequenceTX__++;
+        }
+
+        var text = JSON.stringify(msg);
+        if(stream.__cipher__)
+            text = encrypt(text, stream.__cipher__, self.pk);
+        stream.write(text + '\n', callback);
         return true;
     }
 
