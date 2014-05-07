@@ -65,17 +65,19 @@ function Client(options) {
     if(!options.address)
         throw new Error("zetta-rpc::Client requires address argument");
     if(!options.auth)
-        throw new Error("zetta-rpc::Client requires key argument");
+        throw new Error("zetta-rpc::Client requires auth argument");
 
     self.listeners = [ self ]
     self.connected = false;
     self.buffer = '';
     self.address = options.address.split(':');
     self.infoObject = { }
-    self.pingFreq = options.pingFreq || 0, // 3 * 1000;
+    self.pingFreq = options.pingFreq || 3 * 1000;
+    self.pingDataObject = options.pingDataObject;
     self.sequence = 0;
     self.verbose = options.verbose || zetta_rpc_default_verbose;
-    self.pk = crypto.createHash('sha512').update(options.auth).digest('hex');
+    self.pk = crypto.createHash('sha512').update(options.auth || options.secret).digest('hex');
+    self.rejectUnauthorized = options.rejectUnauthorized || false;
     self.signatures = options.signatures || true;
     self.cipher = options.cipher || zetta_rpc_default_cipher;
     if(self.cipher === true)
@@ -94,6 +96,8 @@ function Client(options) {
         self.auth = false;
         self.stream = tls.connect(8000, tlsOptions, function () {
             console.log('zetta-rpc connected to server, SSL certificate is', self.stream.authorized ? 'authorized' : 'unauthorized');
+            if(self.rejectUnauthorized && !self.stream.authorized)
+                return stream.end();
 
             if (self.connected)
                 console.error("zetta-rpc ERROR - INVALID TLS RECONNECTION ATTEMPT!".magenta.bold);
@@ -208,7 +212,7 @@ function Client(options) {
         var args = arguments;
         _.each(self.listeners, function(listener) {
             try {
-                listener.emit.apply(listener, arguments);
+                listener.emit.apply(listener, args);
             } catch(ex) {
                 console.error("zetta-rpc: error while processing message".magenta.bold);
                 console.error(ex.stack);
@@ -326,9 +330,15 @@ function Server(options, init_callback) { // port, certificates) {
 	self.streams = { };
 	self.connectionCount = 0;
     self.verbose = options.verbose || zetta_rpc_default_verbose;
-    self.pk = crypto.createHash('sha512').update(options.auth).digest('hex');
+    self.rejectUnauthorized = options.rejectUnauthorized || false;
+    self.pk = crypto.createHash('sha512').update(options.auth || options.secret).digest('hex');
 
     self.server = tls.createServer(options.certificates, function (stream) {
+        if(self.rejectUnauthorized && !stream.authorized)
+            return stream.end();
+
+        self.connectionCount++;
+
         var buffer = '';
         stream.setEncoding('utf8');
         stream.on('data', function (data) {
@@ -430,7 +440,6 @@ function Server(options, init_callback) { // port, certificates) {
 
             self.streams[stream.__client_id__] = stream;
 
-            self.connectionCount++;
             self.emit('connect', stream.servername, stream.__client_id__, stream.__designation__, stream.__node__, stream);
 
             return;
