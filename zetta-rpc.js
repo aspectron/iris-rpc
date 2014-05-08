@@ -56,15 +56,15 @@ function Client(options) {
     var self = this;
     events.EventEmitter.call(this);
 
-    if(!options.node)
+    if(!options.routing && !options.node)
         throw new Error("zetta-rpc::Client requires node argument containing node id");
-    if(!options.designation)
+    if(!options.routing && !options.designation)
         throw new Error("zetta-rpc::Client requires designation argument");
     if(!options.certificates)
         throw new Error("zetta-rpc::Client requires certificates argument");
     if(!options.address)
         throw new Error("zetta-rpc::Client requires address argument");
-    if(!options.auth)
+    if(!options.auth || !options.secret)
         throw new Error("zetta-rpc::Client requires auth argument");
 
     self.listeners = [ self ]
@@ -82,6 +82,7 @@ function Client(options) {
     self.cipher = options.cipher || zetta_rpc_default_cipher;
     if(self.cipher === true)
         self.cipher = 'aes-256-cbc';
+    self.routes = options.routes || null;
 
     if(self.verbose)
         console.log("zetta-rpc connecting to address:", self.address);
@@ -203,6 +204,8 @@ function Client(options) {
             self.sequenceRX++;
             delete msg._sig;
         }
+
+        delete msg._cid;
 
         msg.op && emit(msg.op, msg, self);
         self.digestCallback && self.digestCallback(msg, self);
@@ -332,6 +335,7 @@ function Server(options, init_callback) { // port, certificates) {
     self.verbose = options.verbose || zetta_rpc_default_verbose;
     self.rejectUnauthorized = options.rejectUnauthorized || false;
     self.pk = crypto.createHash('sha512').update(options.auth || options.secret).digest('hex');
+    self.routes = options.routes || null;
 
     self.server = tls.createServer(options.certificates, function (stream) {
         if(self.rejectUnauthorized && !stream.authorized)
@@ -385,14 +389,14 @@ function Server(options, init_callback) { // port, certificates) {
 
     function digest(msg, stream) {
 
-        if(msg.op == 'auth-request') {
+        if(msg.op == 'rpc::auth-request') {
             var vector = crypto.createHash('sha512').update(crypto.randomBytes(512)).digest('hex');
             stream.__vector__ = vector;
             stream.write(JSON.stringify({ op : 'auth', vector : vector })+'\n');
             return;
         }
 
-        if(msg.op == 'auth') {
+        if(msg.op == 'rpc::auth') {
             try {
 
                 var data = msg.data;
@@ -440,6 +444,10 @@ function Server(options, init_callback) { // port, certificates) {
 
             self.streams[stream.__client_id__] = stream;
 
+            // SEND ROUTING INFO
+
+            self.dispatch(stream.__client_id__, { op : 'rpc::init', routes : _.keys(self.routes) })
+
             self.emit('connect', stream.servername, stream.__client_id__, stream.__designation__, stream.__node__, stream);
 
             return;
@@ -462,9 +470,36 @@ function Server(options, init_callback) { // port, certificates) {
             delete msg._sig;
         }
 
+        // ###########################################################
+
+        if(msg.op == 'rpc::init') {
+
+        }
+        else
+        
+
+        if(self.routing) {
+            // TODO - RECEIVE & STORE ROUTES
+            if(msg.op == 'route-online') {
+
+            }
+            else
+            if(msg.op == 'route-offline') {
+
+            }
+        }
+
+        // ###########################################################
+
         try {
-            self.digestCallback && self.digestCallback(msg, stream.__client_id__, stream.__designation__, stream.__node__, stream);
-            msg.op && self.emit(msg.op, msg, stream.__client_id__, stream.__designation__, stream.__node__, stream);
+            
+            var cid = msg._r ? msg._r.cid : stream.__client_id__;
+            var designation = msg._r ? msg._r.designation : stream.__designation__;
+            var node = msg._r ? msg._r.node : stream.__node__;
+
+            self.digestCallback && self.digestCallback(msg, cid, designation, node, stream);
+            msg.op && self.emit(msg.op, msg, cid, designation, node, stream);
+
         } catch(ex) {
             console.error("zetta-rpc: error while processing message".magenta.bold);
             console.error(ex.stack);
@@ -484,10 +519,11 @@ function Server(options, init_callback) { // port, certificates) {
             return false;
         }
 
-        var msg = _msg;
+        var msg = _.clone(_msg);
+        if(self.routing)
+            msg._cid = cid;
 
         if(stream.__signatures__) {
-            msg = _.clone(_msg);
             msg._sig = crypto.createHmac('sha256', self.pk).update(stream.__sequenceTX__+'').digest('hex').substring(0, 16);
             stream.__sequenceTX__++;
         }
@@ -506,6 +542,96 @@ function Server(options, init_callback) { // port, certificates) {
 }
 
 util.inherits(Server, events.EventEmitter);
+
+
+// type : 'server'
+
+
+{
+    server : {
+        port : 124,
+        auth,
+        certificates,        
+    }
+
+    or 
+
+    client : {
+        address : ,
+        auth,
+        certificates,
+
+    }
+}
+
+function Router(options) {
+    var self = this;
+
+    self.routes = { }
+
+    self.frontend = new Server({
+        port : options.port, 
+        auth : options.auth || options.secret || options.serverAuth || options.serverSecret,
+        certificates : options.certificates || options.serverCertificates,
+        routing : true
+    })
+
+
+    // connect to relay destination
+    if(options.client) {
+        self.backend = new Client({
+            address: options.client.address,
+            auth: options.auth || options.secret || options.client.auth || options.client.secret,
+            certificates: options.certificates || options.client.certificates,
+            node: options.node,
+            designation: 'router',
+            routes : self.frontend.streams
+        })
+    }
+    else
+    if(options.server) {
+        self.backend = new Server({
+            port : options.server.port , 
+            auth : options.auth || options.secret || options.server.auth || options.server.secret,
+            certificates : options.certificates || options.server.certificates,
+            routes : self.frontend.streams
+        })
+
+    }
+
+
+
+    // start serving
+
+    self.server = new Server({
+        port : options.port , 
+        auth : options.auth || options.secret || options.serverAuth || options.serverSecret,
+        certificates : options.certificates || options.serverCertificates,
+        routing : true
+    })
+
+    self.client.on('connect', function() {
+        self.client.dispatch({ op : 'routes', routes : self.server.routes })
+    })
+
+    self.server.on('connect', function(address, cid, designation, node) {
+        self.client.dispatch({ op : 'route-online', cid : cid, designation : designation, node : node });
+    })
+
+    self.server.on('disconnect', function(address, cid, designation, node) {
+        self.client.dispatch({ op : 'route-online', cid : cid, designation : designation, node : node });
+    })
+
+    self.server.digest(function(msg, cid, designation, node) {
+        msg._r = {
+            cid : cid,
+            designation : designation,
+            node : node
+        }
+
+        self.client.dispatch(msg);
+    })
+}
 
 module.exports = {
 	Client : Client,

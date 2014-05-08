@@ -1,5 +1,5 @@
 var fs = require('fs');
-var zrpc = require('../zetta-rpc');
+var zrpc = require('../v2');
 
 function Server() {
 	var self = this;
@@ -19,6 +19,8 @@ function Server() {
 	}, function(err) {
     	console.log('RPC server listening on',(self.port+'').bold);			
 	});
+
+//	console.log("RPC",self.rpc);
 
     // ---
 

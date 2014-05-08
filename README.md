@@ -33,12 +33,12 @@ var rpc = new zrpc.Multiplexer({		// or zrpc.Client() for connection to a single
     designation: 'user application-id',	// name of the application (used to differentiate connections coming from the same host)
     ping: true,							// optional: enable automatic server ping (see Client::setPingDataObject())
     pingFreq : 3 * 1000,				// optional: ping frequency (default 3 seconds)
+    pingDataObject : ...,				// this object will be transmitted during ping
     cipher: true,						// optional: 'true' or name of cipher algorithm for 2nd layer encryption 
     									// (default 'aes-256-cbc' if true)
     signatures: true					// optional: enable message signing
 });
 
-rpc.setPingDataObject(pingDataObject);	// this object will be transmitted during ping
 rpc.registerListener(eventEmitter);		// register event emitter that will receive messages
 
 // receive messages

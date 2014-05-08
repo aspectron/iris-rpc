@@ -2,7 +2,7 @@ var events = require('events');
 var util = require('util');
 var fs = require('fs');
 var getmac = require('getmac');
-var zrpc = require('../zetta-rpc');
+var zrpc = require('../v2');
 
 function Client(mac) {
     var self = this;
@@ -17,7 +17,8 @@ function Client(mac) {
         ca: [ ]
     }
 
-    var rpc = new zrpc.Multiplexer({
+//    var rpc = new zrpc.Multiplexer({
+    var rpc = new zrpc.Client({
         address: ["127.0.0.1:4488"],
         auth: "f72d7c54d7354f7a8f9d111c6033b6281e7096acc4dcb198763a4555f264259d",
         certificates: self.certificates,
@@ -48,8 +49,10 @@ function Client(mac) {
     })
 
     setInterval(function() {
+        console.log("connected:",rpc.isConnected())
+        console.log("dispatching hello")
         rpc.dispatch({ op : 'hello '})
-    }, 5 * 1000)
+    }, 1 * 1000)
 
     setInterval(function() {
         self.pingDataObject.iteration++;
