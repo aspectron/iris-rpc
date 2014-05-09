@@ -36,8 +36,11 @@ var UUID = require('node-uuid');
 if(!GLOBAL.dpc)
     GLOBAL.dpc = function(t,fn) { if(typeof(t) == 'function') setTimeout(t,0); else setTimeout(fn,t); }
 
-var zetta_rpc_default_verbose = true;
-var zetta_rpc_default_cipher = false;
+var config = {
+    verbose : false,
+    cipher : true,
+    debug : false
+}
 
 function encrypt(text, cipher, key){
     var cipher = crypto.createCipher(cipher, key)
@@ -58,6 +61,7 @@ function Stream(tlsStream, iface) {
 	var self = this;
 	self.tlsStream = tlsStream;
 	self.buffer = '';
+    self.address = tlsStream.servername;
 
     if(iface.rejectUnauthorized && !tlsStream.authorized)
         return tlsStream.end();
@@ -81,8 +85,6 @@ function Stream(tlsStream, iface) {
                 if(self.cipher)
                     msg = decrypt(msg, self.cipher, iface.pk);
 
-                console.log(msg);
-                
                 iface.emit('stream::message',JSON.parse(msg), self);
             }
             catch (ex) {
@@ -92,37 +94,37 @@ function Stream(tlsStream, iface) {
         }
 
     });
+
     tlsStream.on('error', function (err) {
     	iface.connectionCount--;
-        if(iface.verbose)
+        if(config.verbose)
             console.log("zetta-rpc tls stream error:", err.message);
     	iface.emit('stream::error', err, self);
-    	//self.removeAllListeners();
-        //stream.end();
-        //disconnect(stream);
-    });
-    tlsStream.on('end', function () {
-    	iface.connectionCount--;
-//        if(iface.verbose)
-//            console.log("zetta-rpc tls stream end");
-        //disconnect(stream);
-        iface.emit('stream::end', self)
-    	//self.removeAllListeners();
     });
 
+    tlsStream.on('end', function () {
+    	iface.connectionCount--;
+        if(config.verbose)
+            console.log("zetta-rpc tls stream end");
+        iface.emit('stream::end', self)
+    });
 
     self.end = function() {
     	iface.connectionCount--;
     	tlsStream.end();
-        iface.emit('stream::end', self)
     }
 
     self.writeJSON = function(msg) {
+        if(config.debug)
+            console.log('<--',msg);
         self.tlsStream.write(JSON.stringify(msg) + '\n');
         return true;
     }
 
     self.writeTEXT = function(text, callback) {
+        // console.log(text);
+        if(config.debug)
+            console.log('<--',text);
         self.tlsStream.write(text + '\n', callback);
         return true;
     }
@@ -132,11 +134,7 @@ function Stream(tlsStream, iface) {
 function Interface(options) {
 	var self = this;
     events.EventEmitter.call(this);
-//console.log(self);
-//    if(!options.node)
-//        throw new Error("zetta-rpc::Client requires node argument containing node id");
-//    if(!options.designation)
-//        throw new Error("zetta-rpc::Client requires designation argument");
+
     if(!options.certificates)
         throw new Error("zetta-rpc::Client requires certificates argument");
     if(!options.auth && !options.secret)
@@ -147,25 +145,27 @@ function Interface(options) {
     self.infoObject = { }
     self.pingFreq = options.pingFreq || 3 * 1000;
     self.pingDataObject = options.pingDataObject;
-    self.verbose = options.verbose || zetta_rpc_default_verbose;
     self.pk = crypto.createHash('sha512').update(options.auth || options.secret).digest('hex');
     self.rejectUnauthorized = options.rejectUnauthorized || false;
     self.signatures = options.signatures || true;
-    self.cipher = options.cipher || false;
+    self.cipher = options.cipher || config.cipher;
     if(self.cipher === true)
         self.cipher = 'aes-256-cbc';
-    self.routes = options.routes || null;
-
+    self.routes = {
+        local : options.routes || null,
+        remote : { }
+    }
 
     self.iface = { }
 
-
-    self.iface['rpc::auth::request'] = function(msg, stream) {
+    // Server
+    self.iface['rpc::auth::request'] = function(msg, stream) {  
         var vector = crypto.createHash('sha512').update(crypto.randomBytes(512)).digest('hex');
         stream.vector = vector;
         stream.writeJSON({ op : 'rpc::auth::challenge', vector : vector });
     }
 
+    // Client
     self.iface['rpc::auth::challenge'] = function(msg, stream) {
 
         var vector = msg.vector;
@@ -176,7 +176,6 @@ function Interface(options) {
         }
 
         var auth = crypto.createHmac('sha256', self.pk).update(vector).digest('hex');
-//	            stream.auth = true;
 
         var msg = {
             op : 'rpc::auth::response',
@@ -195,18 +194,18 @@ function Interface(options) {
 
         stream.writeJSON(msg);
 
-        if(self.signatures) {
-            var seq_auth = crypto.createHmac('sha1', self.pk).update(vector).digest('hex');
-            self.sequenceTX = parseInt(seq_auth.substring(0, 8), 16);
-            self.sequenceRX = parseInt(seq_auth.substring(8, 16), 16);
-        }
+        stream.signatures = self.signatures;
+        var seq_auth = crypto.createHmac('sha1', self.pk).update(vector).digest('hex');
+        stream.sequenceTX = parseInt(seq_auth.substring(0, 8), 16);
+        stream.sequenceRX = parseInt(seq_auth.substring(8, 16), 16);
 
         if(self.cipher)
         	stream.cipher = self.cipher;
 
-        stream.auth = true;
+        self.streams[stream.cid] = stream;
     }
 
+    // Server
     self.iface['rpc::auth::response'] = function(msg, stream) {
         try {
 
@@ -219,7 +218,7 @@ function Interface(options) {
 
             if(msg.cipher) {
                 stream.cipher = decrypt(msg.cipher, 'aes-256-cbc', self.pk);
-                data = JSON.parse(decrypt(data, stream.__cipher__, self.pk));
+                data = JSON.parse(decrypt(data, stream.cipher, self.pk));
             }
 
             if(!data.node || !data.designation || !data.auth) {
@@ -237,14 +236,12 @@ function Interface(options) {
 
             stream.node = data.node;
             stream.designation = data.designation;
-            stream.cid = data.designation ? data.designation+'-'+data.node : data.node;
-            stream.signature = data.signatures;
+            stream.cid = data.designation ? data.node+'-'+data.designation : data.node;
+            stream.signatures = self.signatures || data.signatures;
 
-            if(stream.signatures) {
-                var sig_auth = crypto.createHmac('sha1', self.pk).update(stream.vector).digest('hex');
-                stream.sequenceRX = parseInt(sig_auth.substring(0, 8), 16);
-                stream.sequenceTX = parseInt(sig_auth.substring(8, 16), 16);
-            }
+            var sig_auth = crypto.createHmac('sha1', self.pk).update(stream.vector).digest('hex');
+            stream.sequenceRX = parseInt(sig_auth.substring(0, 8), 16);
+            stream.sequenceTX = parseInt(sig_auth.substring(8, 16), 16);
 
         }
         catch(ex) {
@@ -255,47 +252,56 @@ function Interface(options) {
 
         self.streams[stream.cid] = stream;
 
-        // SEND ROUTING INFO
-
         self.dispatch(stream.cid, { 
         	op : 'rpc::init', 
         	data : {
         		node : options.node || UUID.v1(),
         		designation : options.designation || ''
         	},
-        	routes : _.keys(self.routes)
+        	routes : _.keys(self.routes.local)
         })
     }
 
+    // Servre & Client
     self.iface['rpc::init'] = function(msg, stream) {
 
 		var data = msg.data;
-		if(data) {
-			self.dispatch({ op : 'rpc::init', routes : _.keys(self.routes) })
+		if(data) {    // Client
+			self.dispatch({ op : 'rpc::init', routes : _.keys(self.routes.local) })
 
 			stream.node = data.node;
 			stream.designation = data.designation;
-            stream.cid = data.designation ? data.designation+'-'+data.node : data.node;
-            self.streams[stream.cid] = stream;
-//	                stream.signature = data.signatures;
+            stream.cid = data.designation ? data.node+'-'+data.designation : data.node;
 		}
 
-		self.routes = { }
-		_.each(msg.routes, function(route) {
-			self.routes[route] = stream;
+		_.each(msg.routes, function(cid) {
+			self.routes.remote[cid] = stream;
 		})
 
 		stream.connected = true;
-        self.emitToListeners('connect', stream.servername, stream.cid, stream);
-
+        self.emitToListeners('connect', stream.address, stream.cid, stream);
     }
 
+    self.iface['rpc::online'] = function(msg, stream) {
+        var cid = msg.cid;
+        self.routes.remote[cid] = stream;
+    }
+
+    self.iface['rpc::offline'] = function(msg, stream) {
+        delete self.routes.remote[cid];
+    }
 
 	self.on('stream::message', function(msg, stream) {
 
-        if(msg._sig) { //stream.signatures) {
+        if(config.debug)
+            console.log('-->', msg);
+
+        if(msg._sig) {
+            if(config.debug)
+                console.log("sequenceRX:".cyan.bold,stream.sequenceRX);
             var sig = crypto.createHmac('sha256', self.pk).update(stream.sequenceRX+'').digest('hex').substring(0, 16);
             if(msg._sig != sig) {
+                console.log("should be ",sig,"is",msg._sig);
                 console.log("zetta-rpc signature failure:", msg);
                 stream.end();
                 return;
@@ -315,13 +321,9 @@ function Interface(options) {
             return;
         }
 
-
         try {
             
             var cid = msg._r ? msg._r.cid : stream.cid;
-            //var designation = msg._r ? msg._r.designation : stream.designation;
-            //var node = msg._r ? msg._r.node : stream.node;
-
             self.digestCallback && self.digestCallback(msg, cid, stream);
             msg.op && self.emitToListeners(msg.op, msg, cid, stream);
 
@@ -333,16 +335,16 @@ function Interface(options) {
 	})
 
 	self.on('stream::error', function(err, stream) {
-		console.log("deleting stream".cyan.bold, stream.cid);
-		delete self.streams[stream.cid];
+        self.emitToListeners('disconnect', stream);
+        delete self.streams[stream.cid];
 	})
 
 	self.on('stream::end', function(stream) {
-		console.log("deleting stream".cyan.bold, stream.cid);
-		delete self.streams[stream.cid];
+        self.emitToListeners('disconnect', stream);
+        delete self.streams[stream.cid];
 	})
 
-
+    //-----
 
     self.emitToListeners = function() {
         var args = arguments;
@@ -356,8 +358,6 @@ function Interface(options) {
         })
     }
 
-//-----
-
 	self.dispatchToStream = function(stream, _msg, callback) {
 
         var msg = _.clone(_msg);
@@ -365,12 +365,14 @@ function Interface(options) {
             msg._cid = cid;
 
         if(stream.signatures) {
+            if(config.debug)
+                console.log("sequenceTX:".cyan.bold,stream.sequenceTX);
             msg._sig = crypto.createHmac('sha256', self.pk).update(stream.sequenceTX+'').digest('hex').substring(0, 16);
             stream.sequenceTX++;
         }
 
         var text = JSON.stringify(msg);
-        if(stream.__cipher__)
+        if(stream.cipher)
             text = encrypt(text, stream.cipher, self.pk);
         stream.writeTEXT(text, callback);
 
@@ -396,8 +398,17 @@ function Interface(options) {
 	            return;
     		}
 
-    		self.dispatchToStream(stream, msg, callback);
+            if(!msg) {
+                console.error('zetta-rpc: dispatch() got empty message'.magenta.bold);
+                callback && callback(new Error("zetta-rpc: no such stream present"))
+            }
+            else
+            	self.dispatchToStream(stream, msg, callback);
     	}
+    }
+
+    self.response = function(msg, resp) {
+        var rid = msg._rid;
     }
 
     self.digest = function(callback) {
@@ -408,6 +419,21 @@ function Interface(options) {
     	self.listeners.push(listener);
     }
 
+    self.setPingDataObject = function(o) {
+        self.pingDataObject = o;
+    }
+
+    function ping() {
+        self.dispatch({ op : 'ping', data : self.pingDataObject});
+        dpc(self.pingFreq, ping);
+    }
+
+    if(options.ping || options.pingFreq) {
+        dpc(function () {
+            ping();
+        })
+    }
+   
 }
 
 util.inherits(Interface, events.EventEmitter);
@@ -428,12 +454,11 @@ function Client(options) {
 	else
 		createConnection(options.address);
 
-
 	function createConnection(address) {
 
 	    var addr = address.split(':');
 
-	    if(self.verbose)
+	    if(config.verbose)
 	        console.log("zetta-rpc connecting to address:", address);
 
 	    var tlsOptions = { }
@@ -456,24 +481,21 @@ function Client(options) {
 	}
 
     self.on('stream::error', function(err, stream) {
-        self.emitToListeners('disconnect', stream);
-        //delete self.clientStream;
         dpc(1000, function() {
         	createConnection(stream.address);
         });
     })
 
     self.on('stream::end', function(stream) {
-        self.emitToListeners('disconnect', stream);
-        //delete self.clientStream;
         dpc(1000, function() {
         	createConnection(stream.address);
         });
     })
 
     self.isConnected = function() {
-//    	console.log("self.streams".yellow.bold, self.streams);
- 		for(var i in self.streams) { return true; } return false;
+ 		for(var i in self.streams)
+            return true;
+        return false;
     }
 }
 
@@ -488,7 +510,6 @@ function Server(options, initCallback) {
     if(!options.port)
         throw new Error("zetta-rpc::Server requires port argument");
 
-
     self.tlsServer = tls.createServer(options.certificates, function (tlsStream) {
         if(self.rejectUnauthorized && !stream.authorized)
             return stream.end();
@@ -502,47 +523,91 @@ function Server(options, initCallback) {
         initCallback && initCallback(err);
     });
 
-
-
     self.on('stream::error', function(err, stream) {
-        self.emitToListeners('disconnect', stream);
         stream.tlsStream.end();
 
     })
 
-    self.on('stream::end', function(stream) {
-        self.emitToListeners('disconnect', stream);
-    })
-
+    // self.on('stream::end', function(stream) {
+    // })
 }
 
 util.inherits(Server, Interface);
 
 
+// Router - allows client->router->server (or client->router<-client) connectivity.
+// This class is meant to help when a server is unable to handle maximum number
+// of connections.
+
+function Router(options) {
+    var self = this;
+
+    self.frontend = new Server({
+        port : options.port, 
+        auth : options.auth || options.secret,
+        certificates : options.certificates,
+        routing : true
+    })
+
+
+    // connect to relay destination
+    if(options.client) {
+        self.backend = new Client({
+            address: options.client.address,
+            auth: options.client.auth || options.client.secret || options.auth || options.secret,
+            certificates: options.certificates || options.client.certificates,
+            node: options.node,
+            designation: 'router',
+            routes : self.frontend.streams
+        })
+    }
+    else
+    if(options.server) {
+        self.backend = new Server({
+            port : options.server.port, 
+            auth : options.server.auth || options.server.secret || options.auth || options.secret,
+            certificates : options.certificates || options.server.certificates,
+            routes : self.frontend.streams
+        })
+    }
+    else
+        throw new Error("zetta-rpc::Router() requires client or server")
+
+    self.frontend.on('connect', function(address, cid, stream) {
+        self.backend.dispatch({ op : 'rpc::online', cid : cid });
+    })
+
+    self.frontend.on('disconnect', function(address, cid, stream) {
+        self.backend.dispatch({ op : 'rpc::offline', cid : cid });
+    })
+
+    self.backend.on('connect', function(address, cid, stream) {
+        self.frontend.dispatch({ op : 'rpc::online', cid : cid });
+    })
+
+    self.backend.on('disconnect', function(address, cid, stream) {
+        self.frontend.dispatch({ op : 'rpc::offline', cid : cid });
+    })
+
+    self.frontend.digest(function(msg, cid, stream) {
+        msg._r = {
+            cid : cid,
+            designation : stream.designation,
+            node : stream.node
+        }
+
+        self.backend.dispatch(msg);
+    })
+
+    self.backend.digest(function(msg, cid) {
+        self.frontend.dispatch(msg._cid, msg);
+    })
+}
 
 
 module.exports = {
 	Client : Client,
-//	Multiplexer : Multiplexer,
-	Server : Server
+	Server : Server,
+    Router : Router,
+    config : config
 }
-
-/*
-var c = new Client();
-console.log(c);
-console.log(c.prototype);
-console.log(c.abc);
-
-
-c.on('abc', function() {
-	console.log('got abc msg');
-})
-
-c.emit('abc');
-
-console.log('instance of Peer:', c instanceof Peer);
-
-console.log('instance of EventEmitter:', c instanceof events.EventEmitter);
-
-
-*/

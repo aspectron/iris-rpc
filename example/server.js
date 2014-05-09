@@ -1,5 +1,5 @@
 var fs = require('fs');
-var zrpc = require('../v2');
+var zrpc = require('../zetta-rpc');
 
 function Server() {
 	var self = this;
@@ -19,9 +19,7 @@ function Server() {
 	}, function(err) {
     	console.log('RPC server listening on',(self.port+'').bold);			
 	});
-
-//	console.log("RPC",self.rpc);
-
+	
     // ---
 
 	self.rpc.on('ping', function(msg, cid, designation, node) {
@@ -48,6 +46,7 @@ function Server() {
 	})
 
 	self.rpc.on('disconnect', function(cid, stream) {
+		console.log('disconnect');
 		var client = self.clients[cid];
 		if(client) {
 			console.log("dropping client  "+cid.bold+" at "+client.address.magenta.bold);
