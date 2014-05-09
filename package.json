@@ -1,7 +1,7 @@
 {
   "name": "zetta-rpc",
   "description": "Zetta Toolkit - JSON RPC over TLS",
-  "version": "0.1.3",
+  "version": "0.1.9",
   "author": {
     "name": "ASPECTRON Inc.",
     "email": "info@aspectron.com"
@@ -24,7 +24,16 @@
   },
   "main": "zetta-rpc",
   "files": [
-    "zetta-rpc.js"
+    "zetta-rpc.js",
+    "README.md",
+    "example/client.js",
+    "example/server.js",
+    "example/router.js",
+    "example/package.json",
+    "example/README.md",
+    "example/certificates/example.csr",
+    "example/certificates/example.key",
+    "example/certificates/generate.sh"
   ],
   "scripts": {
     "prepublish": "npm prune"

@@ -25,7 +25,7 @@ Zetta RPC library allows sending of JSON objects between client and server. If t
 ```javascript
 var zrpc = require('zetta-rpc');
 
-var rpc = new zrpc.Multiplexer({		// or zrpc.Client() for connection to a single server
+var rpc = new zrpc.Client({		// or zrpc.Client() for connection to a single server
     address: "host:port",				// or multiple servers specified as ["host:port",...]  (Multiplexer only)
     auth: "user-supplied-secret-key",
     certificates: ...,					// standard node certificates containing 'key', 'cert', 'ca' data
@@ -80,6 +80,29 @@ rpc.dispatch(cid, { op : 'user-message' })
 
 // receive JSON objects (without 'op' field)
 rpc.digest(function(msg, cid [, designation, node, stream]) { ... })
+```
+
+### Router
+
+If the number of sockets on the system running as a Server is limited, 
+Router can be used to create multiple fron-ends that will accept incoming
+connections and exchange message between these connection and the server.
+For example: if a server is limited to 10 connections, having 10 routers would
+allow to scale socket limit to 100 (this refers to ulimit settings that can)
+impact systems when there are a lot of external connections.
+
+Router allows creation of multiple front-ends for the Server is the number of socket
+
+```javascript
+var router = zrpc.Router({
+	port : 6699,
+	auth : "f72d7c54d7354f7a8f9d111c6033b6281e7096acc4dcb198763a4555f264259d",
+	certificates : self.certificates,
+	client : {
+		address : "127.0.0.1:4488",
+		node : mac
+	}
+})
 ```
 
 ### License
