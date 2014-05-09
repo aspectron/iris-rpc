@@ -335,12 +335,12 @@ function Interface(options) {
 	})
 
 	self.on('stream::error', function(err, stream) {
-        self.emitToListeners('disconnect', stream);
+        self.emitToListeners('disconnect', stream.cid, stream);
         delete self.streams[stream.cid];
 	})
 
 	self.on('stream::end', function(stream) {
-        self.emitToListeners('disconnect', stream);
+        self.emitToListeners('disconnect', stream.cid, stream);
         delete self.streams[stream.cid];
 	})
 
