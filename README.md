@@ -11,6 +11,8 @@ This library offers clear-text JSON RPC over TLS with optional second layer encr
 
 Authentication is based on user supplied secret keys, so this is as secure as your host.
 
+**This library is currently under development & testing. Until this message is removed, use at your own risk!**
+
 ## Usage
 
 `npm install zetta-rpc`
@@ -39,9 +41,12 @@ var rpc = new zrpc.Client({		// or zrpc.Client() for connection to a single serv
     signatures: true					// optional: enable message signing
 });
 
-rpc.registerListener(eventEmitter);		// register event emitter that will receive messages
 
 // receive messages
+rpc.on('user-message', function(msg, rpc) { ... })	
+
+// receive messages with external event emitter
+rpc.registerListener(eventEmitter);		// register event emitter that will receive messages
 eventEmitter.on('user-message', function(msg, rpc) { ... })	
 
 // send messages or JSON objects
