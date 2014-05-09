@@ -116,15 +116,15 @@ function Stream(tlsStream, iface) {
 
     self.writeJSON = function(msg) {
         if(config.debug)
-            console.log('<--',msg);
+            console.log('<--'.bold,msg);
         self.tlsStream.write(JSON.stringify(msg) + '\n');
         return true;
     }
 
     self.writeTEXT = function(text, callback) {
         // console.log(text);
-        if(config.debug)
-            console.log('<--',text);
+        //if(config.debug)
+        //    console.log('<--',text);
         self.tlsStream.write(text + '\n', callback);
         return true;
     }
@@ -370,6 +370,9 @@ function Interface(options) {
             msg._sig = crypto.createHmac('sha256', self.pk).update(stream.sequenceTX+'').digest('hex').substring(0, 16);
             stream.sequenceTX++;
         }
+        
+        if(config.debug)
+            console.log('<--'.bold, msg);
 
         var text = JSON.stringify(msg);
         if(stream.cipher)
@@ -433,7 +436,7 @@ function Interface(options) {
             ping();
         })
     }
-   
+
 }
 
 util.inherits(Interface, events.EventEmitter);

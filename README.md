@@ -30,7 +30,7 @@ var rpc = new zrpc.Client({		// or zrpc.Client() for connection to a single serv
     auth: "user-supplied-secret-key",
     certificates: ...,					// standard node certificates containing 'key', 'cert', 'ca' data
     node: "...",  						// id of this node instance (typically host mac address)
-    designation: 'user application-id',	// name of the application (used to differentiate connections coming from the same host)
+    designation: 'user-application-id',	// name of the application (used to differentiate connections coming from the same host)
     ping: true,							// optional: enable automatic server ping (see Client::setPingDataObject())
     pingFreq : 3 * 1000,				// optional: ping frequency (default 3 seconds)
     pingDataObject : ...,				// this object will be transmitted during ping
@@ -67,19 +67,19 @@ var rpc = new zrpc.Server({
 });
 
 // client connection event: cid is a unique remote end-point identifier (built from designation+node)
-rpc.on('connect', function(address, cid, designation, node, stream) { ... })
+rpc.on('connect', function(address, cid, stream) { ... })
 
 // client disconnection event
 rpc.on('disconnect', function(cid, stream) { ... })
 
 // receive messages
-rpc.on('user-message', function(msg, cid [, designation, node, stream]) { ... })
+rpc.on('user-message', function(msg, cid, stream) { ... })
 
 // send messages
 rpc.dispatch(cid, { op : 'user-message' })
 
 // receive JSON objects (without 'op' field)
-rpc.digest(function(msg, cid [, designation, node, stream]) { ... })
+rpc.digest(function(msg, cid, stream) { ... })
 ```
 
 ### Router
