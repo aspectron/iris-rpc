@@ -142,7 +142,6 @@ function Interface(options) {
 
 	self.listeners = [ self ]
 	self.streams = { }
-    self.infoObject = { }
     self.pingFreq = options.pingFreq || 3 * 1000;
     self.pingDataObject = options.pingDataObject;
     self.pk = crypto.createHash('sha512').update(options.auth || options.secret).digest('hex');
@@ -202,7 +201,7 @@ function Interface(options) {
         if(self.cipher)
         	stream.cipher = self.cipher;
 
-        self.streams[stream.cid] = stream;
+        self.streams[stream.nid] = stream;
     }
 
     // Server
@@ -236,7 +235,7 @@ function Interface(options) {
 
             stream.node = data.node;
             stream.designation = data.designation;
-            stream.cid = data.designation ? data.node+'-'+data.designation : data.node;
+            stream.nid = data.designation ? data.node+'-'+data.designation : data.node;
             stream.signatures = self.signatures || data.signatures;
 
             var sig_auth = crypto.createHmac('sha1', self.pk).update(stream.vector).digest('hex');
@@ -250,9 +249,9 @@ function Interface(options) {
             return;
         }
 
-        self.streams[stream.cid] = stream;
+        self.streams[stream.nid] = stream;
 
-        self.dispatch(stream.cid, { 
+        self.dispatch(stream.nid, { 
         	op : 'rpc::init', 
         	data : {
         		node : options.node || UUID.v1(),
@@ -271,24 +270,24 @@ function Interface(options) {
 
 			stream.node = data.node;
 			stream.designation = data.designation;
-            stream.cid = data.designation ? data.node+'-'+data.designation : data.node;
+            stream.nid = data.designation ? data.node+'-'+data.designation : data.node;
 		}
 
-		_.each(msg.routes, function(cid) {
-			self.routes.remote[cid] = stream;
+		_.each(msg.routes, function(nid) {
+			self.routes.remote[nid] = stream;
 		})
 
 		stream.connected = true;
-        self.emitToListeners('connect', stream.address, stream.cid, stream);
+        self.emitToListeners('connect', stream.address, stream.nid, stream);
     }
 
     self.iface['rpc::online'] = function(msg, stream) {
-        var cid = msg.cid;
-        self.routes.remote[cid] = stream;
+        var nid = msg.nid;
+        self.routes.remote[nid] = stream;
     }
 
     self.iface['rpc::offline'] = function(msg, stream) {
-        delete self.routes.remote[cid];
+        delete self.routes.remote[nid];
     }
 
 	self.on('stream::message', function(msg, stream) {
@@ -315,7 +314,7 @@ function Interface(options) {
         	return;
         }
         else
-        if(!stream.cid) {
+        if(!stream.nid) {
             console.log("zetta-rpc foreign connection "+stream.address+", closing");
             stream.end();
             return;
@@ -323,9 +322,9 @@ function Interface(options) {
 
         try {
             
-            var cid = msg._r ? msg._r.cid : stream.cid;
-            self.digestCallback && self.digestCallback(msg, cid, stream);
-            msg.op && self.emitToListeners(msg.op, msg, cid, stream);
+            var nid = msg._r ? msg._r.nid : stream.nid;
+            self.digestCallback && self.digestCallback(msg, nid, stream);
+            msg.op && self.emitToListeners(msg.op, msg, nid, stream);
 
         } catch(ex) {
             console.error("zetta-rpc: error while processing message".magenta.bold);
@@ -335,13 +334,13 @@ function Interface(options) {
 	})
 
 	self.on('stream::error', function(err, stream) {
-        self.emitToListeners('disconnect', stream.cid, stream);
-        delete self.streams[stream.cid];
+        self.emitToListeners('disconnect', stream.nid, stream);
+        delete self.streams[stream.nid];
 	})
 
 	self.on('stream::end', function(stream) {
-        self.emitToListeners('disconnect', stream.cid, stream);
-        delete self.streams[stream.cid];
+        self.emitToListeners('disconnect', stream.nid, stream);
+        delete self.streams[stream.nid];
 	})
 
     //-----
@@ -362,7 +361,7 @@ function Interface(options) {
 
         var msg = _.clone(_msg);
         if(self.routing)
-            msg._cid = cid;
+            msg._nid = nid;
 
         if(stream.signatures) {
             if(config.debug)
@@ -382,21 +381,21 @@ function Interface(options) {
         return true;
 	}
 
-    self.dispatch = function (cid, msg, callback) {
+    self.dispatch = function (nid, msg, callback) {
 
-    	if(_.isObject(cid)) {
-    		msg = cid;
+    	if(_.isObject(nid)) {
+    		msg = nid;
     		callback = msg;
-    		cid = null;
+    		nid = null;
 
 	    	_.each(self.streams, function(stream) {
 	    		self.dispatchToStream(stream, msg);
 	    	})
     	}
     	else {
-    		var stream = self.streams[cid];
+    		var stream = self.streams[nid];
     		if(!stream) {
-	            console.error('zetta-rpc: no such stream present:'.magenta.bold, cid);
+	            console.error('zetta-rpc: no such stream present:'.magenta.bold, nid);
 	            callback && callback(new Error("zetta-rpc: no such stream present"))
 	            return;
     		}
@@ -431,7 +430,7 @@ function Interface(options) {
         dpc(self.pingFreq, ping);
     }
 
-    if(options.ping || options.pingFreq) {
+    if(options.ping || options.pingFreq || options.pingDataObject) {
         dpc(function () {
             ping();
         })
@@ -576,25 +575,25 @@ function Router(options) {
     else
         throw new Error("zetta-rpc::Router() requires client or server")
 
-    self.frontend.on('connect', function(address, cid, stream) {
-        self.backend.dispatch({ op : 'rpc::online', cid : cid });
+    self.frontend.on('connect', function(address, nid, stream) {
+        self.backend.dispatch({ op : 'rpc::online', nid : nid });
     })
 
-    self.frontend.on('disconnect', function(address, cid, stream) {
-        self.backend.dispatch({ op : 'rpc::offline', cid : cid });
+    self.frontend.on('disconnect', function(address, nid, stream) {
+        self.backend.dispatch({ op : 'rpc::offline', nid : nid });
     })
 
-    self.backend.on('connect', function(address, cid, stream) {
-        self.frontend.dispatch({ op : 'rpc::online', cid : cid });
+    self.backend.on('connect', function(address, nid, stream) {
+        self.frontend.dispatch({ op : 'rpc::online', nid : nid });
     })
 
-    self.backend.on('disconnect', function(address, cid, stream) {
-        self.frontend.dispatch({ op : 'rpc::offline', cid : cid });
+    self.backend.on('disconnect', function(address, nid, stream) {
+        self.frontend.dispatch({ op : 'rpc::offline', nid : nid });
     })
 
-    self.frontend.digest(function(msg, cid, stream) {
+    self.frontend.digest(function(msg, nid, stream) {
         msg._r = {
-            cid : cid,
+            nid : nid,
             designation : stream.designation,
             node : stream.node
         }
@@ -602,8 +601,8 @@ function Router(options) {
         self.backend.dispatch(msg);
     })
 
-    self.backend.digest(function(msg, cid) {
-        self.frontend.dispatch(msg._cid, msg);
+    self.backend.digest(function(msg, nid) {
+        self.frontend.dispatch(msg._nid, msg);
     })
 }
 
