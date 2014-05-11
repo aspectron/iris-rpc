@@ -57,11 +57,13 @@ function decrypt(text, cipher, key){
 }
 
 
-function Stream(tlsStream, iface) {
+function Stream(tlsStream, iface, address) {
 	var self = this;
 	self.tlsStream = tlsStream;
 	self.buffer = '';
-    self.address = tlsStream.servername;
+    self.address = tlsStream.socket.remoteAddress || address;
+    self.serverName = tlsStream.servername;
+
 
     if(iface.rejectUnauthorized && !tlsStream.authorized)
         return tlsStream.end();
@@ -478,7 +480,7 @@ function Client(options) {
             stream.writeJSON({ op : 'rpc::auth::request'});
         });
 
-        var stream = new Stream(tlsStream, self);
+        var stream = new Stream(tlsStream, self, addr[0]);
         stream.address = address;
 	}
 
