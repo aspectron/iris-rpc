@@ -73,9 +73,9 @@ function Stream(tlsStream, iface, address) {
     tlsStream.setEncoding('utf8');
 
     tlsStream.on('data', function (data) {
-        if (self.buffer.length + data.length > 1024 * 65) {
+        /*if (self.buffer.length + data.length > 1024 * 65) {
             self.buffer = data;
-        }
+        }*/
 
         self.buffer += data;
 
@@ -142,6 +142,8 @@ function Interface(options) {
     if(!options.auth && !options.secret)
         throw new Error("zetta-rpc::Client requires auth argument");
 
+// console.log("UUID".bold,options.uuid);
+
 	self.listeners = [ self ]
 	self.streams = { }
     self.pingFreq = options.pingFreq || 3 * 1000;
@@ -186,8 +188,10 @@ function Interface(options) {
         var data = { 
             // op : 'auth', 
             auth : auth, 
-            signatures : self.signatures, 
-            node : options.node || UUID.v1(), 
+            signatures : self.signatures,
+            uuid : options.uuid,
+            mac : options.mac,
+//            node : options.node || UUID.v1(), 
             designation : options.designation || ''
         }
 
@@ -203,7 +207,7 @@ function Interface(options) {
         if(self.cipher)
         	stream.cipher = self.cipher;
 
-        self.streams[stream.nid] = stream;
+        self.streams[stream.uuid] = stream;
     }
 
     // Server
@@ -222,8 +226,8 @@ function Interface(options) {
                 data = JSON.parse(decrypt(data, stream.cipher, self.pk));
             }
 
-            if(!data.node || !data.designation || !data.auth) {
-                console.log("zetta-rpc auth packet missing auth, node or designation:", msg);
+            if(!data.uuid || !data.designation || !data.auth) {
+                console.log("zetta-rpc auth packet missing auth, uuid or designation:", msg);
                 stream.end();
                 return;
             }
@@ -235,9 +239,11 @@ function Interface(options) {
                 return;
             }
 
-            stream.node = data.node;
+            stream.uuid = data.uuid;
+            stream.mac = data.mac;
+            //stream.node = data.node;
             stream.designation = data.designation;
-            stream.nid = data.designation ? data.node+'-'+data.designation : data.node;
+            //stream.nid = data.designation ? data.node+'-'+data.designation : data.node;
             stream.signatures = self.signatures || data.signatures;
 
             var sig_auth = crypto.createHmac('sha1', self.pk).update(stream.vector).digest('hex');
@@ -251,12 +257,14 @@ function Interface(options) {
             return;
         }
 
-        self.streams[stream.nid] = stream;
+        self.streams[stream.uuid] = stream;
 
-        self.dispatch(stream.nid, { 
+        self.dispatch(stream.uuid, { 
         	op : 'rpc::init', 
         	data : {
-        		node : options.node || UUID.v1(),
+                uuid : options.uuid,
+                mac : options.mac,
+        		//node : options.node || UUID.v1(),
         		designation : options.designation || ''
         	},
         	routes : _.keys(self.routes.local)
@@ -270,26 +278,28 @@ function Interface(options) {
 		if(data) {    // Client
 			self.dispatch({ op : 'rpc::init', routes : _.keys(self.routes.local) })
 
-			stream.node = data.node;
+            stream.uuid = data.uuid;
+            stream.mac = data.mac;
+			//stream.node = data.node;
 			stream.designation = data.designation;
-            stream.nid = data.designation ? data.node+'-'+data.designation : data.node;
+            //stream.uuid = data.designation ? data.node+'-'+data.designation : data.node;
 		}
 
-		_.each(msg.routes, function(nid) {
-			self.routes.remote[nid] = stream;
+		_.each(msg.routes, function(uuid) {
+			self.routes.remote[uuid] = stream;
 		})
 
 		stream.connected = true;
-        self.emitToListeners('connect', stream.address, stream.nid, stream);
+        self.emitToListeners('connect', stream.address, stream.uuid, stream);
     }
 
     self.iface['rpc::online'] = function(msg, stream) {
-        var nid = msg.nid;
-        self.routes.remote[nid] = stream;
+        //var nid = msg.nid;
+        self.routes.remote[msg.uuid] = stream;
     }
 
     self.iface['rpc::offline'] = function(msg, stream) {
-        delete self.routes.remote[nid];
+        delete self.routes.remote[uuid];
     }
 
 	self.on('stream::message', function(msg, stream) {
@@ -316,7 +326,7 @@ function Interface(options) {
         	return;
         }
         else
-        if(!stream.nid) {
+        if(!stream.uuid) {
             console.log("zetta-rpc foreign connection "+stream.address+", closing");
             stream.end();
             return;
@@ -324,25 +334,26 @@ function Interface(options) {
 
         try {
             
-            var nid = msg._r ? msg._r.nid : stream.nid;
-            self.digestCallback && self.digestCallback(msg, nid, stream);
-            msg.op && self.emitToListeners(msg.op, msg, nid, stream);
+            var uuid = msg._r ? msg._r.uuid : stream.uuid;
+            self.digestCallback && self.digestCallback(msg, uuid, stream);
+            msg.op && self.emitToListeners(msg.op, msg, uuid, stream);
 
         } catch(ex) {
             console.error("zetta-rpc: error while processing message".magenta.bold);
             console.error(ex.stack);
+            self.emitToListeners('rpc::error', ex, msg);
         }
 
 	})
 
 	self.on('stream::error', function(err, stream) {
-        self.emitToListeners('disconnect', stream.nid, stream);
-        delete self.streams[stream.nid];
+        self.emitToListeners('disconnect', stream.uuid, stream);
+        delete self.streams[stream.uuid];
 	})
 
 	self.on('stream::end', function(stream) {
-        self.emitToListeners('disconnect', stream.nid, stream);
-        delete self.streams[stream.nid];
+        self.emitToListeners('disconnect', stream.uuid, stream);
+        delete self.streams[stream.uuid];
 	})
 
     //-----
@@ -355,15 +366,15 @@ function Interface(options) {
             } catch(ex) {
                 console.error("zetta-rpc: error while processing message".magenta.bold);
                 console.error(ex.stack);
+                self.emitToListeners('rpc::error', ex);
             }
         })
     }
 
 	self.dispatchToStream = function(stream, _msg, callback) {
-
         var msg = _.clone(_msg);
         if(self.routing)
-            msg._nid = nid;
+            msg._uuid = stream.uuid;
 
         if(stream.signatures) {
             if(config.debug)
@@ -378,26 +389,26 @@ function Interface(options) {
         var text = JSON.stringify(msg);
         if(stream.cipher)
             text = encrypt(text, stream.cipher, self.pk);
+        if(msg.op != 'ping') console.log("sending text...",msg);
         stream.writeTEXT(text, callback);
 
         return true;
 	}
 
-    self.dispatch = function (nid, msg, callback) {
-
-    	if(_.isObject(nid)) {
-    		msg = nid;
+    self.dispatch = function (uuid, msg, callback) {
+    	if(_.isObject(uuid)) {
+    		msg = uuid;
     		callback = msg;
-    		nid = null;
+    		uuid = null;
 
 	    	_.each(self.streams, function(stream) {
 	    		self.dispatchToStream(stream, msg);
 	    	})
     	}
     	else {
-    		var stream = self.streams[nid];
+    		var stream = self.streams[uuid];
     		if(!stream) {
-	            console.error('zetta-rpc: no such stream present:'.magenta.bold, nid);
+	            console.error('zetta-rpc: no such stream present:'.magenta.bold, uuid);
 	            callback && callback(new Error("zetta-rpc: no such stream present"))
 	            return;
     		}
@@ -427,8 +438,12 @@ function Interface(options) {
         self.pingDataObject = o;
     }
 
-    function ping() {
+    self.ping = function() {
         self.dispatch({ op : 'ping', data : self.pingDataObject});
+    }
+
+    function ping() {
+        self.ping();
         dpc(self.pingFreq, ping);
     }
 
@@ -560,7 +575,7 @@ function Router(options) {
             address: options.client.address,
             auth: options.client.auth || options.client.secret || options.auth || options.secret,
             certificates: options.certificates || options.client.certificates,
-            node: options.node,
+            //node: options.node,
             designation: 'router',
             routes : self.frontend.streams
         })
@@ -577,34 +592,34 @@ function Router(options) {
     else
         throw new Error("zetta-rpc::Router() requires client or server")
 
-    self.frontend.on('connect', function(address, nid, stream) {
-        self.backend.dispatch({ op : 'rpc::online', nid : nid });
+    self.frontend.on('connect', function(address, uuid, stream) {
+        self.backend.dispatch({ op : 'rpc::online', uuid : uuid });
     })
 
-    self.frontend.on('disconnect', function(address, nid, stream) {
-        self.backend.dispatch({ op : 'rpc::offline', nid : nid });
+    self.frontend.on('disconnect', function(address, uuid, stream) {
+        self.backend.dispatch({ op : 'rpc::offline', uuid : uuid });
     })
 
-    self.backend.on('connect', function(address, nid, stream) {
-        self.frontend.dispatch({ op : 'rpc::online', nid : nid });
+    self.backend.on('connect', function(address, uuid, stream) {
+        self.frontend.dispatch({ op : 'rpc::online', uuid : uuid });
     })
 
-    self.backend.on('disconnect', function(address, nid, stream) {
-        self.frontend.dispatch({ op : 'rpc::offline', nid : nid });
+    self.backend.on('disconnect', function(address, uuid, stream) {
+        self.frontend.dispatch({ op : 'rpc::offline', uuid : uuid });
     })
 
-    self.frontend.digest(function(msg, nid, stream) {
+    self.frontend.digest(function(msg, uuid, stream) {
         msg._r = {
-            nid : nid,
+            uuid : uuid,
             designation : stream.designation,
-            node : stream.node
+            uuid : stream.uuid
         }
 
         self.backend.dispatch(msg);
     })
 
-    self.backend.digest(function(msg, nid) {
-        self.frontend.dispatch(msg._nid, msg);
+    self.backend.digest(function(msg, uuid) {
+        self.frontend.dispatch(msg._uuid, msg);
     })
 }
 
