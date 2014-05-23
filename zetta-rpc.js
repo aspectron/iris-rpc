@@ -80,7 +80,7 @@ function Stream(tlsStream, iface, address) {
         self.buffer += data;
 
         var idx = self.buffer.indexOf('\n');
-        if (~idx) {
+        while(~idx) {
             var msg = self.buffer.substring(0, idx);
             self.buffer = self.buffer.substring(idx + 1);
             try {
@@ -93,6 +93,8 @@ function Stream(tlsStream, iface, address) {
                 console.log(ex.stack);
                 tlsStream.end();
             }
+            
+            idx = self.buffer.indexOf('\n');
         }
 
     });
@@ -138,11 +140,14 @@ function Interface(options) {
     events.EventEmitter.call(this);
 
     if(!options.certificates)
-        throw new Error("zetta-rpc::Client requires certificates argument");
+        throw new Error("zetta-rpc - requires certificates argument");
     if(!options.auth && !options.secret)
-        throw new Error("zetta-rpc::Client requires auth argument");
-
+        throw new Error("zetta-rpc - requires auth argument");
+    if(!options.uuid)
+        throw new Error("zetta-rpc - UUID is required");
 // console.log("UUID".bold,options.uuid);
+
+    console.log("Creating RPC instance:".green.bold, options);
 
 	self.listeners = [ self ]
 	self.streams = { }
@@ -195,6 +200,8 @@ function Interface(options) {
             designation : options.designation || ''
         }
 
+        // console.log("RPC CLIENT SENDING INIT DATA:".blue.bold, data);
+
         msg.data = self.cipher ? encrypt(JSON.stringify(data), 'aes-256-cbc', self.pk) : data;
 
         stream.writeJSON(msg);
@@ -207,7 +214,7 @@ function Interface(options) {
         if(self.cipher)
         	stream.cipher = self.cipher;
 
-        self.streams[stream.uuid] = stream;
+//        self.streams[stream.uuid] = stream;
     }
 
     // Server
@@ -216,7 +223,7 @@ function Interface(options) {
 
             var data = msg.data;
             if(!data) {
-                console.log("zetta-rpc auth packet missing data:", msg);
+                console.log("zetta-rpc auth packet missing data (peer at "+stream.address+"):", msg);
                 stream.end();
                 return;
             }
@@ -226,8 +233,11 @@ function Interface(options) {
                 data = JSON.parse(decrypt(data, stream.cipher, self.pk));
             }
 
-            if(!data.uuid || !data.designation || !data.auth) {
-                console.log("zetta-rpc auth packet missing auth, uuid or designation:", msg);
+            // console.log("RPC SERVER RECEIVING INIT DATA:".blue.bold, data);
+
+
+            if(!data.uuid || !data.auth) {
+                console.log("zetta-rpc auth packet missing auth, uuid or designation (peer at "+stream.address+"):", data);
                 stream.end();
                 return;
             }
@@ -257,6 +267,7 @@ function Interface(options) {
             return;
         }
 
+        // console.log(("SERVER CONNECTING STREAM "+stream.uuid).green.bold);
         self.streams[stream.uuid] = stream;
 
         self.dispatch(stream.uuid, { 
@@ -276,13 +287,17 @@ function Interface(options) {
 
 		var data = msg.data;
 		if(data) {    // Client
-			self.dispatch({ op : 'rpc::init', routes : _.keys(self.routes.local) })
 
             stream.uuid = data.uuid;
             stream.mac = data.mac;
 			//stream.node = data.node;
 			stream.designation = data.designation;
             //stream.uuid = data.designation ? data.node+'-'+data.designation : data.node;
+
+            // console.log(("CLIENT CONNECTING STREAM "+stream.uuid).green.bold);
+            self.streams[stream.uuid] = stream;
+
+            self.dispatch(stream.uuid, { op : 'rpc::init', routes : _.keys(self.routes.local) })
 		}
 
 		_.each(msg.routes, function(uuid) {
@@ -348,11 +363,13 @@ function Interface(options) {
 
 	self.on('stream::error', function(err, stream) {
         self.emitToListeners('disconnect', stream.uuid, stream);
+        // console.log(("RPC DISCONNECTING STREAM "+stream.uuid).green.bold);
         delete self.streams[stream.uuid];
 	})
 
 	self.on('stream::end', function(stream) {
         self.emitToListeners('disconnect', stream.uuid, stream);
+        // console.log(("RPC DISCONNECTING STREAM "+stream.uuid).green.bold);
         delete self.streams[stream.uuid];
 	})
 
@@ -389,7 +406,7 @@ function Interface(options) {
         var text = JSON.stringify(msg);
         if(stream.cipher)
             text = encrypt(text, stream.cipher, self.pk);
-        if(msg.op != 'ping') console.log("sending text...",msg);
+        // if(msg.op != 'ping') console.log("sending text...",msg);
         stream.writeTEXT(text, callback);
 
         return true;
@@ -401,11 +418,13 @@ function Interface(options) {
     		callback = msg;
     		uuid = null;
 
-	    	_.each(self.streams, function(stream) {
+	    	_.each(self.streams, function(stream, uuid) {
+                // console.log(("dispatching to stream "+uuid).cyan.bold+("  op: "+msg.op).bold+" (multi)");
 	    		self.dispatchToStream(stream, msg);
 	    	})
     	}
     	else {
+            // console.log(("dispatching to stream "+uuid).cyan.bold+("  op: "+msg.op).bold+" (single)");
     		var stream = self.streams[uuid];
     		if(!stream) {
 	            console.error('zetta-rpc: no such stream present:'.magenta.bold, uuid);
@@ -596,7 +615,7 @@ function Router(options) {
         self.backend.dispatch({ op : 'rpc::online', uuid : uuid });
     })
 
-    self.frontend.on('disconnect', function(address, uuid, stream) {
+    self.frontend.on('disconnect', function(uuid, stream) {
         self.backend.dispatch({ op : 'rpc::offline', uuid : uuid });
     })
 
@@ -604,7 +623,7 @@ function Router(options) {
         self.frontend.dispatch({ op : 'rpc::online', uuid : uuid });
     })
 
-    self.backend.on('disconnect', function(address, uuid, stream) {
+    self.backend.on('disconnect', function(uuid, stream) {
         self.frontend.dispatch({ op : 'rpc::offline', uuid : uuid });
     })
 
