@@ -119,7 +119,7 @@ function Stream(tlsStream, iface, address) {
     }
 
     self.writeJSON = function(msg) {
-        if(config.debug)
+//        if(config.debug)
 //            console.log('<--'.bold,msg);
         self.tlsStream.write(JSON.stringify(msg) + '\n');
         return true;
