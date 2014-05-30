@@ -147,7 +147,7 @@ function Interface(options) {
         throw new Error("zetta-rpc - UUID is required");
 // console.log("UUID".bold,options.uuid);
 
-    console.log("Creating RPC instance:".green.bold, options);
+    // console.log("Creating RPC instance:".green.bold, options);
 
 	self.listeners = [ self ]
 	self.streams = { }
