@@ -120,7 +120,7 @@ function Stream(tlsStream, iface, address) {
 
     self.writeJSON = function(msg) {
         if(config.debug)
-            console.log('<--'.bold,msg);
+//            console.log('<--'.bold,msg);
         self.tlsStream.write(JSON.stringify(msg) + '\n');
         return true;
     }
@@ -128,7 +128,7 @@ function Stream(tlsStream, iface, address) {
     self.writeTEXT = function(text, callback) {
         // console.log(text);
         //if(config.debug)
-        //    console.log('<--',text);
+            //console.log('<--',text);
         self.tlsStream.write(text + '\n', callback);
         return true;
     }
@@ -319,8 +319,8 @@ function Interface(options) {
 
 	self.on('stream::message', function(msg, stream) {
 
-        if(config.debug)
-            console.log('-->', msg);
+        // if(config.debug)
+            // console.log('-->', msg);
 
         if(msg._sig) {
             if(config.debug)
@@ -400,8 +400,8 @@ function Interface(options) {
             stream.sequenceTX++;
         }
         
-        if(config.debug)
-            console.log('<--'.bold, msg);
+//        if(config.debug)
+//            console.log('<--'.bold, msg);
 
         var text = JSON.stringify(msg);
         if(stream.cipher)
