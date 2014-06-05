@@ -28,7 +28,6 @@ var fs = require("fs");
 var net = require("net");
 var tls = require('tls');
 var crypto = require('crypto');
-var colors = require('colors');
 var events = require('events');
 var util = require('util');
 var UUID = require('node-uuid');
