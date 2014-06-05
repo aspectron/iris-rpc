@@ -154,6 +154,7 @@ function Interface(options) {
     // console.log("Creating RPC instance:".green.bold, options);
 
     self.uuid = options.uuid;
+    self.designation = options.designation;
     self.mac = options.mac;
 	self.listeners_ = [ self ]
 	self.streams = { }
@@ -207,10 +208,10 @@ function Interface(options) {
             // op : 'auth', 
             auth : auth, 
             signatures : self.signatures,
-            uuid : options.uuid,
-            mac : options.mac,
+            uuid : self.uuid,
+            mac : self.mac,
 //            node : options.node || UUID.v1(), 
-            designation : options.designation || ''
+            designation : self.designation || ''
         }
 
         // console.log("RPC CLIENT SENDING INIT DATA:".blue.bold, data);
@@ -287,10 +288,10 @@ function Interface(options) {
         	op : 'rpc::init', 
             v : RPC_VERSION,
         	data : {
-                uuid : options.uuid,
-                mac : options.mac,
+                uuid : self.uuid,
+                mac : self.mac,
         		//node : options.node || UUID.v1(),
-        		designation : options.designation || ''
+        		designation : self.designation || ''
         	},
         	routes : _.keys(self.routes.local)
         })
@@ -618,7 +619,7 @@ function Client(options) {
 
         self.auth = false;
         var tlsStream = tls.connect(tlsOptions, function () {
-            console.log('zetta-rpc '+options.designation+' connected to server, SSL certificate is', tlsStream.authorized ? 'authorized' : 'unauthorized');
+            console.log('zetta-rpc '+self.designation+' connected to server, SSL certificate is', tlsStream.authorized ? 'authorized' : 'unauthorized');
             if(self.rejectUnauthorized && !tlsStream.authorized)
                 return tlsStream.end();
 
