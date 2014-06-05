@@ -36,6 +36,8 @@ var UUID = require('node-uuid');
 if(!GLOBAL.dpc)
     GLOBAL.dpc = function(t,fn) { if(typeof(t) == 'function') setTimeout(t,0); else setTimeout(fn,t); }
 
+var RPC_VERSION = 1;
+
 var config = {
     verbose : false,
     cipher : true,
@@ -132,25 +134,31 @@ function Stream(tlsStream, iface, address) {
         self.tlsStream.write(text + '\n', callback);
         return true;
     }
-
 }
+
 
 function Interface(options) {
 	var self = this;
     events.EventEmitter.call(this);
 
     if(!options.certificates)
-        throw new Error("zetta-rpc - requires certificates argument");
+        throw new Error("zetta-rpc options - missing 'certificates' argument");
     if(!options.auth && !options.secret)
-        throw new Error("zetta-rpc - requires auth argument");
+        throw new Error("zetta-rpc options - missing 'auth' argument");
     if(!options.uuid)
-        throw new Error("zetta-rpc - UUID is required");
+        throw new Error("zetta-rpc options - missing 'uuid' argument");
+//    if(!options.mac)
+//        throw new Error("zetta-rpc options - mac is required");
 // console.log("UUID".bold,options.uuid);
 
     // console.log("Creating RPC instance:".green.bold, options);
 
+    self.uuid = options.uuid;
+    self.mac = options.mac;
 	self.listeners = [ self ]
 	self.streams = { }
+    self.pending = { }
+    self.timeout = options.timeout || 30 * 1000;
     self.pingFreq = options.pingFreq || 3 * 1000;
     self.pingDataObject = options.pingDataObject;
     self.pk = crypto.createHash('sha512').update(options.auth || options.secret).digest('hex');
@@ -170,7 +178,11 @@ function Interface(options) {
     self.iface['rpc::auth::request'] = function(msg, stream) {  
         var vector = crypto.createHash('sha512').update(crypto.randomBytes(512)).digest('hex');
         stream.vector = vector;
-        stream.writeJSON({ op : 'rpc::auth::challenge', vector : vector });
+        stream.writeJSON({ 
+            op : 'rpc::auth::challenge', 
+            v : RPC_VERSION,
+            vector : vector 
+        });
     }
 
     // Client
@@ -187,6 +199,7 @@ function Interface(options) {
 
         var msg = {
             op : 'rpc::auth::response',
+            v : RPC_VERSION,
             cipher : self.cipher ? encrypt(self.cipher, 'aes-256-cbc', self.pk) : false,
         }
 
@@ -272,6 +285,7 @@ function Interface(options) {
 
         self.dispatch(stream.uuid, { 
         	op : 'rpc::init', 
+            v : RPC_VERSION,
         	data : {
                 uuid : options.uuid,
                 mac : options.mac,
@@ -297,7 +311,11 @@ function Interface(options) {
             // console.log(("CLIENT CONNECTING STREAM "+stream.uuid).green.bold);
             self.streams[stream.uuid] = stream;
 
-            self.dispatch(stream.uuid, { op : 'rpc::init', routes : _.keys(self.routes.local) })
+            self.dispatch(stream.uuid, { 
+                op : 'rpc::init', 
+                v : RPC_VERSION,
+                routes : _.keys(self.routes.local) 
+            })
 		}
 
 		_.each(msg.routes, function(uuid) {
@@ -349,9 +367,39 @@ function Interface(options) {
 
         try {
             
-            var uuid = msg._r ? msg._r.uuid : stream.uuid;
-            self.digestCallback && self.digestCallback(msg, uuid, stream);
-            msg.op && self.emitToListeners(msg.op, msg, uuid, stream);
+            if(msg._req) {
+                var emitted = self.emit(msg.op, msg, function(err, resp) {
+                    self.dispatchToStream(stream, {
+                        _resp : msg._req,
+                        err : err,
+                        resp : resp,
+                    });
+                })
+
+                if(!emitted) {
+                    self.dispatchToStream(stream, {
+                        _resp : msg._req,
+                        err : { error : "No such handler '"+msg.op+"'" }
+                    });
+                }
+            }
+            else
+            if(msg._resp) {
+                var pending = self.pending[msg._resp];
+                if(pending) {
+                    pending.callback(msg.err, msg.resp);
+                    delete self.pending[msg._resp];
+                }
+                else {
+                    console.error('zetta-rpc: no pending callback for response:'.magenta.bold, msg);
+                }
+            }
+            else
+            {
+                var uuid = msg._r ? msg._r.uuid : stream.uuid;
+                self.digestCallback && self.digestCallback(msg, uuid, stream);
+                msg.op && self.emitToListeners(msg.op, msg, uuid, stream);
+            }
 
         } catch(ex) {
             console.error("zetta-rpc: error while processing message".magenta.bold);
@@ -390,6 +438,27 @@ function Interface(options) {
 
 	self.dispatchToStream = function(stream, _msg, callback) {
         var msg = _.clone(_msg);
+
+
+        if(callback) {
+            var req_uuid = UUID.v1();
+            msg._req = req_uuid;
+            self.pending[req_uuid] = {
+                uuid : req_uuid,
+                req : msg,
+                callback : callback,
+                ts : Date.now(),
+            }
+
+/*            var data = msg;
+            msg = {
+                _req : req_uuid,
+                data : data
+            }
+*/            
+        }
+
+
         if(self.routing)
             msg._uuid = stream.uuid;
 
@@ -403,24 +472,34 @@ function Interface(options) {
 //        if(config.debug)
 //            console.log('<--'.bold, msg);
 
+
+
         var text = JSON.stringify(msg);
         if(stream.cipher)
             text = encrypt(text, stream.cipher, self.pk);
         // if(msg.op != 'ping') console.log("sending text...",msg);
-        stream.writeTEXT(text, callback);
+        stream.writeTEXT(text);
 
         return true;
 	}
 
     self.dispatch = function (uuid, msg, callback) {
     	if(_.isObject(uuid)) {
-    		msg = uuid;
     		callback = msg;
+            msg = uuid;
     		uuid = null;
+
+            if(callback && !_.size(self.streams)) {
+                return callback({ error : "RPC stream is not connected", req : msg });
+            }
+            else
+            if(callback && _.size(self.streams) > 1) {
+                return callback({ error : "Multiple streams connected (not supported by RPC)", req : msg });
+            }
 
 	    	_.each(self.streams, function(stream, uuid) {
                 // console.log(("dispatching to stream "+uuid).cyan.bold+("  op: "+msg.op).bold+" (multi)");
-	    		self.dispatchToStream(stream, msg);
+	    		self.dispatchToStream(stream, msg, callback);
 	    	})
     	}
     	else {
@@ -471,6 +550,25 @@ function Interface(options) {
             ping();
         })
     }
+
+    function timeoutMonitor() {
+        var ts = Date.now();
+        var purge = [ ]
+        _.each(self.pending, function(pending, uuid) {
+            if(ts - pending.ts > self.timeout) {
+                pending.callback.call(self, { error : true, timeout : self.timeout, req : pending.req } );
+                purge.push(uuid);
+            }
+        })
+
+        _.each(purge, function(uuid) {
+            delete self.pending[uuid];
+        })
+
+        dpc(1000, timeoutMonitor);
+    }
+
+    timeoutMonitor();
 
 }
 
