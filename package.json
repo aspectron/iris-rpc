@@ -1,14 +1,15 @@
 {
   "name": "zetta-rpc",
   "description": "Zetta Toolkit - JSON RPC over TLS",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "author": {
     "name": "ASPECTRON Inc.",
     "email": "info@aspectron.com"
   },
   "dependencies": {
     "underscore" : "*",
-    "node-uuid" : "*"
+    "node-uuid" : "*",
+    "colors" : "*"
   },
   "keywords": [
     "utilities",

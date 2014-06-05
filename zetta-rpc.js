@@ -27,6 +27,7 @@ var _ = require("underscore");
 var fs = require("fs");
 var net = require("net");
 var tls = require('tls');
+var colors = require('colors');
 var crypto = require('crypto');
 var events = require('events');
 var util = require('util');
@@ -154,7 +155,7 @@ function Interface(options) {
 
     self.uuid = options.uuid;
     self.mac = options.mac;
-	self.listeners = [ self ]
+	self.listeners_ = [ self ]
 	self.streams = { }
     self.pending = { }
     self.timeout = options.timeout || 30 * 1000;
@@ -367,15 +368,27 @@ function Interface(options) {
         try {
             
             if(msg._req) {
-                var emitted = self.emit(msg.req.op, msg.req, function(err, resp) {
+                var listeners = self.listeners(msg.req.op);
+                if(listeners.length == 1) {
+                    //var emitted = self.emit(
+                    listeners[0].call(self, msg.req, function(err, resp) {
+                        self.dispatchToStream(stream, {
+                            _resp : msg._req,
+                            err : err,
+                            resp : resp,
+                        });
+                    })
+                }
+                else
+                if(listeners.length)
+                {
                     self.dispatchToStream(stream, {
                         _resp : msg._req,
-                        err : err,
-                        resp : resp,
+                        err : { error : "Too many handlers for '"+msg.req.op+"'" }
                     });
-                })
-
-                if(!emitted) {
+                }
+                else
+                {
                     self.dispatchToStream(stream, {
                         _resp : msg._req,
                         err : { error : "No such handler '"+msg.req.op+"'" }
@@ -409,7 +422,9 @@ function Interface(options) {
 	})
 
 	self.on('stream::error', function(err, stream) {
-        self.emitToListeners('disconnect', stream.uuid, stream);
+
+        if(err.code != 'ECONNREFUSED')
+            self.emitToListeners('disconnect', stream.uuid, stream);
         // console.log(("RPC DISCONNECTING STREAM "+stream.uuid).green.bold);
         delete self.streams[stream.uuid];
 	})
@@ -424,7 +439,7 @@ function Interface(options) {
 
     self.emitToListeners = function() {
         var args = arguments;
-        _.each(self.listeners, function(listener) {
+        _.each(self.listeners_, function(listener) {
             try {
                 listener.emit.apply(listener, args);
             } catch(ex) {
@@ -527,7 +542,7 @@ function Interface(options) {
     }
 
     self.registerListener = function(listener) {
-    	self.listeners.push(listener);
+    	self.listeners_.push(listener);
     }
 
     self.setPingDataObject = function(o) {
@@ -603,7 +618,7 @@ function Client(options) {
 
         self.auth = false;
         var tlsStream = tls.connect(tlsOptions, function () {
-            console.log('zetta-rpc connected to server, SSL certificate is', tlsStream.authorized ? 'authorized' : 'unauthorized');
+            console.log('zetta-rpc '+options.designation+' connected to server, SSL certificate is', tlsStream.authorized ? 'authorized' : 'unauthorized');
             if(self.rejectUnauthorized && !tlsStream.authorized)
                 return tlsStream.end();
 
