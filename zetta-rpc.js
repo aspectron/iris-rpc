@@ -368,7 +368,7 @@ function Interface(options) {
         try {
             
             if(msg._req) {
-                var emitted = self.emit(msg.op, msg, function(err, resp) {
+                var emitted = self.emit(msg.req.op, msg.req, function(err, resp) {
                     self.dispatchToStream(stream, {
                         _resp : msg._req,
                         err : err,
@@ -379,7 +379,7 @@ function Interface(options) {
                 if(!emitted) {
                     self.dispatchToStream(stream, {
                         _resp : msg._req,
-                        err : { error : "No such handler '"+msg.op+"'" }
+                        err : { error : "No such handler '"+msg.req.op+"'" }
                     });
                 }
             }
@@ -437,12 +437,11 @@ function Interface(options) {
     }
 
 	self.dispatchToStream = function(stream, _msg, callback) {
-        var msg = _.clone(_msg);
-
+        var msg = null;
 
         if(callback) {
             var req_uuid = UUID.v1();
-            msg._req = req_uuid;
+            // msg._req = req_uuid;
             self.pending[req_uuid] = {
                 uuid : req_uuid,
                 req : msg,
@@ -450,13 +449,13 @@ function Interface(options) {
                 ts : Date.now(),
             }
 
-/*            var data = msg;
             msg = {
                 _req : req_uuid,
-                data : data
+                req : _msg
             }
-*/            
         }
+        else
+            msg = _.clone(_msg);
 
 
         if(self.routing)
