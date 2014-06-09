@@ -62,6 +62,7 @@ function decrypt(text, cipher, key){
 function Stream(tlsStream, iface, address) {
 	var self = this;
 	self.tlsStream = tlsStream;
+    self.iface = iface;
 	self.buffer = '';
     self.address = tlsStream.socket.remoteAddress || address;
     self.serverName = tlsStream.servername;
