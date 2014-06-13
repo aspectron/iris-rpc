@@ -373,13 +373,21 @@ function Interface(options) {
                 var listeners = self.listeners(msg.req.op);
                 if(listeners.length == 1) {
                     //var emitted = self.emit(
-                    listeners[0].call(self, msg.req, function(err, resp) {
+                    try {
+                        listeners[0].call(self, msg.req, function(err, resp) {
+                            self.dispatchToStream(stream, {
+                                _resp : msg._req,
+                                err : err,
+                                resp : resp,
+                            });
+                        })
+                    } catch(ex) {
+                        console.log("responding with error".red.bold,ex);
                         self.dispatchToStream(stream, {
                             _resp : msg._req,
-                            err : err,
-                            resp : resp,
+                            err : ex
                         });
-                    })
+                    }
                 }
                 else
                 if(listeners.length)
@@ -401,7 +409,13 @@ function Interface(options) {
             if(msg._resp) {
                 var pending = self.pending[msg._resp];
                 if(pending) {
-                    pending.callback(msg.err, msg.resp);
+                    try {
+                        pending.callback(msg.err, msg.resp);
+                    }
+                    catch(ex) {
+                        console.error("Error in callback for response:",msg);
+                        console.error(ex.stack);
+                    }
                     delete self.pending[msg._resp];
                 }
                 else {
@@ -620,7 +634,7 @@ function Client(options) {
 
         self.auth = false;
         var tlsStream = tls.connect(tlsOptions, function () {
-            console.log('zetta-rpc '+self.designation+' connected to server, SSL certificate is', tlsStream.authorized ? 'authorized' : 'unauthorized');
+            console.log('zetta-rpc '+self.designation+' connected to server @'+address+', SSL certificate is', tlsStream.authorized ? 'authorized' : 'unauthorized');
             if(self.rejectUnauthorized && !tlsStream.authorized)
                 return tlsStream.end();
 
@@ -685,6 +699,42 @@ function Server(options, initCallback) {
 
 util.inherits(Server, Interface);
 
+
+function Multiplexer(options, config, rpcTitle) {
+    var self = this;
+    self.active = { }
+    self.links = createFromConfig(options, config, rpcTitle);
+//    if(!_.isArray(self.links))
+//        self.links = [ self.links ];
+//    console.log("links:",self.links);
+
+    self.on = function(op, callback) {
+        _.each(self.links, function(rpc) {
+            rpc.on(op, callback);
+        })
+    }
+
+    self.on('connect', function(address, uuid, stream) {
+        self.active[uuid] = stream;
+    })
+
+    self.on('disconnect', function(uuid, stream) {
+        delete self.active[uuid];
+    })
+
+    self.registerListener = function(listener) {
+        _.each(self.links, function(rpc) {
+            rpc.registerListener(listener);
+        })
+    }
+
+    self.dispatch = function() {
+        var args = arguments;
+        _.each(self.links, function(rpc) {
+            rpc.dispatch.apply(rpc, args);
+        })
+    }
+}
 
 // Router - allows client->router->server (or client->router<-client) connectivity.
 // This class is meant to help when a server is unable to handle maximum number
@@ -755,10 +805,48 @@ function Router(options) {
     })
 }
 
+function createFromConfig(options, config, rpcTitle) {
+
+    function createInstance(options, config, rpcTitle) { // rpcConfig) {
+        var rpcConfig = _.extend({ }, options);
+        _.extend(rpcConfig, config);
+        if(!rpcConfig.port && !rpcConfig.address) {
+            console.error("Error:".red.bold,rpcConfig);
+            throw new Error("port or address required in rpc config");
+        }
+        if(rpcConfig.port && rpcConfig.address) {
+            console.error("Error:".red.bold,rpcConfig);
+            throw new Error("both port and address present in rpc config");
+        }
+        if(rpcConfig.port) {
+            return new Server(rpcConfig, function(err) {
+                console.log((rpcTitle.toUpperCase()+" RPC").bold+" server listening on",(rpcConfig.port+'').bold);    
+            });
+        }
+        else {
+            return new Client(rpcConfig);
+        }
+    }
+
+    if(config.address || config.port) {
+        var ret = { }
+        ret[rpcTitle] = createInstance(options, config, rpcTitle || options.designation);
+        return ret;
+    }
+    else {
+        var ret = { }
+        _.each(config, function(rpcConfig, rpcTitle) {
+            ret[rpcTitle] = createInstance(options, rpcConfig, rpcTitle);
+        })
+        return ret;
+    }
+}
 
 module.exports = {
 	Client : Client,
 	Server : Server,
+    Multiplexer : Multiplexer,
     Router : Router,
+    createFromConfig : createFromConfig,
     config : config
 }
