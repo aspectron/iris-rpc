@@ -157,8 +157,9 @@ function Interface(options) {
     self.uuid = options.uuid;
     self.designation = options.designation;
     self.mac = options.mac;
-	self.listeners_ = [ self ]
-	self.streams = { }
+    self.filters = [ ]
+    self.listeners_ = [ self ]
+    self.streams = { }
     self.pending = { }
     self.timeout = options.timeout || 30 * 1000;
     self.pingFreq = options.pingFreq || 3 * 1000;
@@ -367,7 +368,42 @@ function Interface(options) {
             return;
         }
 
-        try {
+        if(!self.filters.length)
+            return digestMessage(msg, stream);
+
+        var filters = self.filters.slice();
+        
+        _digest();
+
+        function _digest() {
+            var filter = filters.shift();
+            if(!filter)
+                return digestMessage(msg, stream);
+
+            filter.call(self, msg._req ? msg.req : msg, stream, function(err, disallow) {
+                if(err)
+                    return _fail(err);
+
+                if(disallow)
+                    return _fail(disallow);
+
+                _digest();
+            })
+        }
+
+        function _fail(err) {
+            if(msg._req) {
+                self.dispatchToStream(stream, {
+                    _resp : msg._req,
+                    err : err
+                });
+            }
+        }
+    })
+
+    function digestMessage(msg, stream) {
+        try 
+        {
             
             if(msg._req) {
                 var listeners = self.listeners(msg.req.op);
@@ -434,8 +470,7 @@ function Interface(options) {
             console.error(ex.stack);
             self.emitToListeners('rpc::error', ex, msg);
         }
-
-	})
+	}
 
 	self.on('stream::error', function(err, stream) {
 
@@ -553,6 +588,10 @@ function Interface(options) {
         var rid = msg._rid;
     }
 
+    self.filter = function(callback) {
+        self.filters.push(callback);
+    }
+
     self.digest = function(callback) {
         self.digestCallback = callback;
     }
@@ -585,7 +624,7 @@ function Interface(options) {
         var purge = [ ]
         _.each(self.pending, function(pending, uuid) {
             if(ts - pending.ts > self.timeout) {
-                pending.callback.call(self, { error : true, timeout : self.timeout, req : pending.req } );
+                pending.callback.call(self, { error : "Connection Timed Out", timeout : self.timeout, req : pending.req } );
                 purge.push(uuid);
             }
         })
