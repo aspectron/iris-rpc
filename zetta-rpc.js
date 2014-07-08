@@ -66,6 +66,7 @@ function Stream(tlsStream, iface, address) {
 	self.buffer = '';
     self.address = tlsStream.socket.remoteAddress || address;
     self.serverName = tlsStream.servername;
+    self.pending = { }
 
 
     if(iface.rejectUnauthorized && !tlsStream.authorized)
@@ -104,8 +105,9 @@ function Stream(tlsStream, iface, address) {
 
     tlsStream.on('error', function (err) {
     	iface.connectionCount--;
-        if(config.verbose)
-            console.log("zetta-rpc tls stream error:", err.message);
+//        if(config.verbose)
+        if(config.verbose || err.code != 'ECONNREFUSED')
+            console.log("zetta-rpc tls stream error:", err/*.message*/, ' | ' ,self.iface.designation+'@'+self.address);
     	iface.emit('stream::error', err, self);
     });
 
@@ -160,8 +162,8 @@ function Interface(options) {
     self.filters = [ ]
     self.listeners_ = [ self ]
     self.streams = { }
-    self.pending = { }
-    self.timeout = options.timeout || 30 * 1000;
+    // self.pending = { }
+    self.timeout = options.timeout || 60 * 1000;
     self.pingFreq = options.pingFreq || 3 * 1000;
     self.pingDataObject = options.pingDataObject;
     self.pk = crypto.createHash('sha512').update(options.auth || options.secret).digest('hex');
@@ -410,7 +412,14 @@ function Interface(options) {
                 if(listeners.length == 1) {
                     //var emitted = self.emit(
                     try {
-                        listeners[0].call(self, msg.req, function(err, resp) {
+                        listeners[0].call(self, msg.req, function(_err, resp) {
+                            var err = (_err instanceof Error) ? {
+                                    _Error : true,
+                                    name : _err.name,
+                                    message : _err.message,
+                                    stack : _err.stack,
+                                } : _err;
+
                             self.dispatchToStream(stream, {
                                 _resp : msg._req,
                                 err : err,
@@ -443,16 +452,23 @@ function Interface(options) {
             }
             else
             if(msg._resp) {
-                var pending = self.pending[msg._resp];
+                var pending = stream.pending[msg._resp];
                 if(pending) {
                     try {
-                        pending.callback(msg.err, msg.resp);
+
+                        var err = msg.err;
+                        if(err && err._Error) {
+                            var err = new GLOBAL[msg.err.name](msg.err.message);
+                            err.stack = msg.err.stack;
+                        }
+
+                        pending.callback(err, msg.resp);
                     }
                     catch(ex) {
                         console.error("Error in callback for response:",msg);
                         console.error(ex.stack);
                     }
-                    delete self.pending[msg._resp];
+                    delete stream.pending[msg._resp];
                 }
                 else {
                     console.error('zetta-rpc: no pending callback for response:'.magenta.bold, msg);
@@ -476,12 +492,14 @@ function Interface(options) {
 
         if(err.code != 'ECONNREFUSED')
             self.emitToListeners('disconnect', stream.uuid, stream);
+        pendingCleanup(stream);
         // console.log(("RPC DISCONNECTING STREAM "+stream.uuid).green.bold);
         delete self.streams[stream.uuid];
 	})
 
 	self.on('stream::end', function(stream) {
         self.emitToListeners('disconnect', stream.uuid, stream);
+        pendingCleanup(stream);
         // console.log(("RPC DISCONNECTING STREAM "+stream.uuid).green.bold);
         delete self.streams[stream.uuid];
 	})
@@ -507,7 +525,7 @@ function Interface(options) {
         if(callback) {
             var req_uuid = UUID.v1();
             // msg._req = req_uuid;
-            self.pending[req_uuid] = {
+            stream.pending[req_uuid] = {
                 uuid : req_uuid,
                 req : msg,
                 callback : callback,
@@ -554,7 +572,7 @@ function Interface(options) {
     		uuid = null;
 
             if(callback && !_.size(self.streams)) {
-                return callback({ error : "RPC stream is not connected", req : msg });
+                return callback({ error : "RPC stream is not connected", disconnected : true, req : msg });
             }
             else
             if(callback && _.size(self.streams) > 1) {
@@ -619,18 +637,26 @@ function Interface(options) {
         })
     }
 
+    function pendingCleanup(stream) {
+        _.each(stream.pending, function(pending) {
+            pending.callback.call(self, { error : "Connection Terminated", disconnected : true, req : pending.req } );
+        })
+    }
+
     function timeoutMonitor() {
         var ts = Date.now();
         var purge = [ ]
-        _.each(self.pending, function(pending, uuid) {
-            if(ts - pending.ts > self.timeout) {
-                pending.callback.call(self, { error : "Connection Timed Out", timeout : self.timeout, req : pending.req } );
-                purge.push(uuid);
-            }
+        _.each(self.streams, function(stream) {
+            _.each(stream.pending, function(pending, uuid) {
+                if(ts - pending.ts > self.timeout) {
+                    pending.callback.call(self, { error : "Connection Timed Out", timeout : self.timeout, req : pending.req } );
+                    purge.push({ stream : stream, uuid : uuid });
+                }
+            })
         })
 
-        _.each(purge, function(uuid) {
-            delete self.pending[uuid];
+        _.each(purge, function(o) {
+            delete o.stream[o.uuid];
         })
 
         dpc(1000, timeoutMonitor);
