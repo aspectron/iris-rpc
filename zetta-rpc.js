@@ -458,7 +458,7 @@ function Interface(options) {
 
                         var err = msg.err;
                         if(err && err._Error) {
-                            var err = new GLOBAL[msg.err.name](msg.err.message);
+                            err = GLOBAL[msg.err.name] ? new GLOBAL[msg.err.name](msg.err.message) : new Error(msg.err.message);
                             err.stack = msg.err.stack;
                         }
 
@@ -656,7 +656,7 @@ function Interface(options) {
         })
 
         _.each(purge, function(o) {
-            delete o.stream[o.uuid];
+            delete o.stream.pending[o.uuid];
         })
 
         dpc(1000, timeoutMonitor);
