@@ -337,7 +337,7 @@ function Interface(options) {
     }
 
     self.iface['rpc::offline'] = function(msg, stream) {
-        delete self.routes.remote[uuid];
+        delete self.routes.remote[msg.uuid];
     }
 
 	self.on('stream::message', function(msg, stream) {
@@ -809,6 +809,7 @@ function Router(options) {
     var self = this;
 
     self.frontend = new Server({
+        uuid : options.uuid,
         port : options.port, 
         auth : options.auth || options.secret,
         certificates : options.certificates,
@@ -819,6 +820,7 @@ function Router(options) {
     // connect to relay destination
     if(options.client) {
         self.backend = new Client({
+            uuid : options.client.uuid,
             address: options.client.address,
             auth: options.client.auth || options.client.secret || options.auth || options.secret,
             certificates: options.certificates || options.client.certificates,
@@ -830,6 +832,7 @@ function Router(options) {
     else
     if(options.server) {
         self.backend = new Server({
+            uuid : options.server.uuid,
             port : options.server.port, 
             auth : options.server.auth || options.server.secret || options.auth || options.secret,
             certificates : options.certificates || options.server.certificates,
