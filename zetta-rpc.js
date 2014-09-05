@@ -333,10 +333,12 @@ function Interface(options) {
 
     self.iface['rpc::online'] = function(msg, stream) {
         //var nid = msg.nid;
+        self.emitToListeners('rpc::online', msg.uuid, stream);
         self.routes.remote[msg.uuid] = stream;
     }
 
     self.iface['rpc::offline'] = function(msg, stream) {
+        self.emitToListeners('rpc::offline', msg.uuid, stream);
         delete self.routes.remote[msg.uuid];
     }
 
@@ -408,6 +410,24 @@ function Interface(options) {
         {
             
             if(msg._req) {
+                if (msg.req._uuid) {
+                    self.digestCallback && self.digestCallback(msg.req, function(_err, resp) {
+                        var err = (_err instanceof Error) ? {
+                            _Error : true,
+                                name : _err.name,
+                                message : _err.message,
+                                stack : _err.stack
+                        } : _err;
+
+                        self.dispatchToStream(stream, {
+                            _resp : msg._req,
+                            err : err,
+                            resp : resp
+                        });
+                    });
+                    return false;
+                }
+
                 var listeners = self.listeners(msg.req.op);
                 if(listeners.length == 1) {
                     //var emitted = self.emit(
@@ -868,8 +888,10 @@ function Router(options) {
         self.backend.dispatch(msg);
     })
 
-    self.backend.digest(function(msg, uuid) {
-        self.frontend.dispatch(msg._uuid, msg);
+    self.backend.digest(function(msg, callback) {
+        var uuid = msg._uuid;
+        delete msg._uuid;
+        self.frontend.dispatch(uuid, msg, callback);
     })
 }
 
