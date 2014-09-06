@@ -871,6 +871,12 @@ function Router(options) {
     })
 
     self.backend.on('connect', function(address, uuid, stream) {
+        if (_.size(self.frontend.streams)) {
+            _.each(self.frontend.streams, function(e, i) {
+                self.backend.dispatch({ op : 'rpc::online', uuid : i });
+            });
+        }
+
         self.frontend.dispatch({ op : 'rpc::online', uuid : uuid });
     })
 
