@@ -177,6 +177,8 @@ function Interface(options) {
         remote : { }
     }
 
+    self.routing = options.routing || false;
+
     self.iface = { }
 
     // Server
@@ -410,6 +412,8 @@ function Interface(options) {
         {
             
             if(msg._req) {
+
+                // for supporting of callback function invocation by server
                 if (msg.req._uuid) {
                     self.digestCallback && self.digestCallback(msg.req, function(_err, resp) {
                         var err = (_err instanceof Error) ? {
@@ -464,6 +468,25 @@ function Interface(options) {
                 }
                 else
                 {
+                    // for supporting of callback function invocation by client
+                    if (self.routing) {
+                        self.digestCallback && self.digestCallback(msg.req,  stream.uuid, stream, function(_err, resp) {
+                            var err = (_err instanceof Error) ? {
+                                _Error : true,
+                                name : _err.name,
+                                message : _err.message,
+                                stack : _err.stack
+                            } : _err;
+
+
+                            self.dispatchToStream(stream, {
+                                _resp : msg._req,
+                                err : err,
+                                resp : resp
+                            });
+                        });
+                        return false;
+                    }
                     self.dispatchToStream(stream, {
                         _resp : msg._req,
                         err : { error : "No such handler '"+msg.req.op+"'" }
@@ -884,14 +907,14 @@ function Router(options) {
         self.frontend.dispatch({ op : 'rpc::offline', uuid : uuid });
     })
 
-    self.frontend.digest(function(msg, uuid, stream) {
+    self.frontend.digest(function(msg, uuid, stream, callback) {
         msg._r = {
             uuid : uuid,
             designation : stream.designation,
             uuid : stream.uuid
         }
 
-        self.backend.dispatch(msg);
+        self.backend.dispatch(msg, callback);
     })
 
     self.backend.digest(function(msg, callback) {
