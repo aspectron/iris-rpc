@@ -335,8 +335,8 @@ function Interface(options) {
 
     self.iface['rpc::online'] = function(msg, stream) {
         //var nid = msg.nid;
-        self.emitToListeners('rpc::online', msg.uuid, stream);
         self.routes.remote[msg.uuid] = stream;
+        self.emitToListeners('rpc::online', msg.uuid, stream);
     }
 
     self.iface['rpc::offline'] = function(msg, stream) {
@@ -619,6 +619,14 @@ function Interface(options) {
             }
             else
             if(callback && _.size(self.streams) > 1) {
+                if (self.routes.remote[msg._uuid]) {
+                    if (self.streams[self.routes.remote[msg._uuid].uuid]) {
+                        self.dispatchToStream(self.streams[self.routes.remote[msg._uuid].uuid], msg, callback);
+
+                        return;
+                    }
+                }
+
                 return callback({ error : "Multiple streams connected (not supported by RPC)", req : msg });
             }
 
