@@ -63,7 +63,7 @@ function Stream(tlsStream, iface, address) {
 	var self = this;
 	self.tlsStream = tlsStream;
     self.iface = iface;
-	self.buffer = '';
+    self.buffer = null;
     self.address = tlsStream.socket.remoteAddress || address;
     self.serverName = tlsStream.servername;
     self.pending = { }
@@ -74,33 +74,40 @@ function Stream(tlsStream, iface, address) {
 
     iface.connectionCount++;
 
-    tlsStream.setEncoding('utf8');
-
+    self._bufHeaderLen = 4;
     tlsStream.on('data', function (data) {
-        /*if (self.buffer.length + data.length > 1024 * 65) {
+        if (self.buffer) {
+            self.buffer = Buffer.concat([self.buffer, data], self.buffer.length + data.length);
+        } else {
             self.buffer = data;
-        }*/
-
-        self.buffer += data;
-
-        var idx = self.buffer.indexOf('\n');
-        while(~idx) {
-            var msg = self.buffer.substring(0, idx);
-            self.buffer = self.buffer.substring(idx + 1);
-            try {
-                if(self.cipher)
-                    msg = decrypt(msg, self.cipher, iface.pk);
-
-                iface.emit('stream::message',JSON.parse(msg), self);
-            }
-            catch (ex) {
-                console.log(ex.stack);
-                tlsStream.end();
-            }
-            
-            idx = self.buffer.indexOf('\n');
         }
 
+        var t = true;
+        while (t) {
+            if (self.buffer.length < 4) {
+                return t = false;
+            }
+
+            var msgLen = self.buffer.readUInt32BE(0);
+            if (self.buffer.length < self._bufHeaderLen + msgLen) {
+                t = false;
+            } else {
+                var buffer = self.buffer.slice(0 + self._bufHeaderLen, self._bufHeaderLen + msgLen);
+                self.buffer = self.buffer.slice(self._bufHeaderLen + msgLen);
+
+                var msg = buffer.toString();
+                try {
+                    if(self.cipher)
+                        msg = decrypt(msg, self.cipher, iface.pk);
+
+                    iface.emit('stream::message',JSON.parse(msg), self);
+                } catch (ex) {
+                    console.log(ex.stack);
+                    tlsStream.end();
+                    t = false;
+                }
+            }
+        }
     });
 
     tlsStream.on('error', function (err) {
@@ -126,7 +133,10 @@ function Stream(tlsStream, iface, address) {
     self.writeJSON = function(msg) {
 //        if(config.debug)
 //            console.log('<--'.bold,msg);
-        self.tlsStream.write(JSON.stringify(msg) + '\n');
+        var message = new Buffer(JSON.stringify(msg))
+        var header = new Buffer(4);
+        header.writeUInt32BE(message.length, 0);
+        self.tlsStream.write(Buffer.concat([header, message], header.length + message.length));
         return true;
     }
 
@@ -134,7 +144,10 @@ function Stream(tlsStream, iface, address) {
         // console.log(text);
         //if(config.debug)
             //console.log('<--',text);
-        self.tlsStream.write(text + '\n', callback);
+        var message = new Buffer(text)
+        var header = new Buffer(4);
+        header.writeUInt32BE(message.length, 0);
+        self.tlsStream.write(Buffer.concat([header, message], header.length + message.length), callback);
         return true;
     }
 }
