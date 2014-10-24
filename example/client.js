@@ -24,7 +24,8 @@ function Client(mac) {
         // node: mac,
         designation: 'example',
         pingFreq: 3 * 1000,
-        pingDataObject : self.pingDataObject
+        pingDataObject : self.pingDataObject,
+        uuid: '1111111-37db-11e4-s4w6-e03f490ee47d'
     });
 
     // register us as external listener (for `self.on()` processing)
