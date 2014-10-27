@@ -4,6 +4,7 @@ var util = require('util');
 var fs = require('fs');
 var getmac = require('getmac');
 var zrpc = require('../zetta-rpc');
+var UUID = require('node-uuid');
 
 function Server(mac) {
 	var self = this;
@@ -20,7 +21,8 @@ function Server(mac) {
 		port : self.port, 
 		auth : "f72d7c54d7354f7a8f9d111c6033b6281e7096acc4dcb198763a4555f264259d",
 		certificates : self.certificates,
-		node : mac
+		node : mac,
+        uuid: UUID.v1()
 	}, function(err) {
     	console.log('RPC server listening on',(self.port+'').bold);			
 	});
@@ -33,7 +35,12 @@ function Server(mac) {
 		console.log("Server::ping - ".bold, "cid:".bold, cid, "message:".bold, msg);
 		var client = self.clients[cid];
 		console.log("responding with 'pong'");
+
+//        self.rpc.dispatch({ op : 'pong', ts : Date.now() })
 		self.rpc.dispatch(cid, { op : 'pong', ts : Date.now() })
+//		self.rpc.dispatch(cid, { op : 'pong', ts : Date.now()}, function() {
+//            console.log('arguments:', arguments)
+//        })
 	})
 
 	self.rpc.on('connect', function(address, cid, designation, node, stream) {
@@ -87,7 +94,8 @@ function Client(mac) {
         // node: mac,
         designation: 'example',
         pingFreq: 3 * 1000,
-        pingDataObject : self.pingDataObject
+        pingDataObject : self.pingDataObject,
+        uuid: '12234567890'
     });
 
     // register us as external listener (for `self.on()` processing)
@@ -136,13 +144,16 @@ function Router(mac) {
         ca: [ ]
     }
 
+    var uuid = UUID.v1();
 	var router = zrpc.Router({
+        uuid: uuid,
 		port : 6699,
 		auth : "f72d7c54d7354f7a8f9d111c6033b6281e7096acc4dcb198763a4555f264259d",
 		certificates : self.certificates,
 		client : {
 			address : "127.0.0.1:4488",
-			node : mac
+			node : mac,
+            uuid: uuid
 		}
 	})
 }

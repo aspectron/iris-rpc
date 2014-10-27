@@ -632,14 +632,6 @@ function Interface(options) {
             }
             else
             if(callback && _.size(self.streams) > 1) {
-                if (self.routes.remote[msg._uuid]) {
-                    if (self.streams[self.routes.remote[msg._uuid].uuid]) {
-                        self.dispatchToStream(self.streams[self.routes.remote[msg._uuid].uuid], msg, callback);
-
-                        return;
-                    }
-                }
-
                 return callback({ error : "Multiple streams connected (not supported by RPC)", req : msg });
             }
 
@@ -652,9 +644,15 @@ function Interface(options) {
             // console.log(("dispatching to stream "+uuid).cyan.bold+("  op: "+msg.op).bold+" (single)");
     		var stream = self.streams[uuid];
     		if(!stream) {
-	            console.error('zetta-rpc: no such stream present:'.magenta.bold, uuid);
-	            callback && callback(new Error("zetta-rpc: no such stream present"))
-	            return;
+                if (self.routes.remote[uuid] && self.streams[self.routes.remote[uuid].uuid]) {
+                    stream = self.streams[self.routes.remote[uuid].uuid];
+                    if (msg)
+                        msg._uuid = uuid;
+                } else {
+                    console.error('zetta-rpc: no such stream present:'.magenta.bold, uuid);
+                    callback && callback(new Error("zetta-rpc: no such stream present"))
+                    return;
+                }
     		}
 
             if(!msg) {
@@ -930,9 +928,9 @@ function Router(options) {
 
     self.frontend.digest(function(msg, uuid, stream, callback) {
         msg._r = {
-            uuid : uuid,
+            uuid : uuid, // ??
             designation : stream.designation,
-            uuid : stream.uuid
+            uuid : stream.uuid // ??
         }
 
         self.backend.dispatch(msg, callback);
@@ -941,7 +939,11 @@ function Router(options) {
     self.backend.digest(function(msg, callback) {
         var uuid = msg._uuid;
         delete msg._uuid;
-        self.frontend.dispatch(uuid, msg, callback);
+        if (!uuid) {
+            self.frontend.dispatch(msg, callback);
+        }
+        else
+            self.frontend.dispatch(uuid, msg, callback);
     })
 }
 
