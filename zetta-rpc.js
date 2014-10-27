@@ -940,7 +940,10 @@ function Router(options) {
         var uuid = msg._uuid;
         delete msg._uuid;
         if (!uuid) {
-            self.frontend.dispatch(msg, callback);
+            if (typeof callback === 'function')
+                self.frontend.dispatch(msg, callback);
+            else
+                self.frontend.dispatch(msg);
         }
         else
             self.frontend.dispatch(uuid, msg, callback);
