@@ -23,6 +23,14 @@ var rpc = new zrpc.Client({
 
 rpc.on('connect', function (address, cid, stream) {
     console.log('Connect::', cid);
+
+    setInterval(function () {
+        rpc.dispatch(cid, {op: 'specific-server-test', data: Date.now()});
+
+        rpc.dispatch(cid, {op: 'specific-server-callback-test', data: Date.now()}, function (err, result) {
+            console.log('Specific server callback test', arguments);
+        });
+    }, 5000);
 })
 
 rpc.on('disconnect', function (cid, stream) {

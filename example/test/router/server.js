@@ -1,6 +1,7 @@
 var zrpc = require('../../../zetta-rpc');
 var UUID = require('node-uuid');
 var fs = require('fs');
+var _ = require('underscore');
 
 
 var port = process.argv[2];
@@ -25,14 +26,35 @@ rpc.on('connect', function (address, cid, stream) {
     setInterval(function () {
         rpc.dispatch(cid, {op: 'client-test', data: Date.now()});
 
+        // not work because cid is router
         rpc.dispatch(cid, {op: 'client-callback-test', data: Date.now()}, function () {
             console.log('client-callback-test', arguments);
         });
     }, 5000);
 })
 
+rpc.on('rpc::online', function(cid, stream){
+    console.log('online', cid);
+
+    rpc.dispatch(cid, {op: 'test-router-client', msg: Date.now()}, function (err, resp){
+        console.log('Test router client::', arguments);
+    });
+});
+
+rpc.on('rpc::offline', function(cid, stream){
+    console.log('offline', cid);
+});
+
 rpc.on('disconnect', function (cid, stream) {
     console.log('Disconnect::', cid);
+
+    if (_.size(stream.iface.routes.remote)) {
+        _.each(stream.iface.routes.remote, function(e, i) {
+            if (stream.iface.routes.remote[i].uuid == cid) {
+                self.rpc.emitToListeners('rpc::offline', i);
+            }
+        });
+    }
 })
 
 rpc.on('server-test', function (msg, cid, stream) {
@@ -53,9 +75,9 @@ rpc.on('specific-server-callback-test', function (msg, callback) {
     callback(null, {msg: 'Specifics server callback test - OK'});
 })
 
-rpc.digest(function (msg, cid, stream) {
-    console.log('Server::digest() -', cid, ':', msg);
-})
+//rpc.digest(function (msg, cid, stream) {
+//    console.log('Server::digest() -', cid, ':', msg);
+//})
 
 setInterval(function () {
     rpc.dispatch({op: 'common-opcode', data: Date.now()});
