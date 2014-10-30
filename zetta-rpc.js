@@ -432,7 +432,7 @@ function Interface(options) {
     function digestMessage(msg, stream) {
         try 
         {
-            
+
             if(msg._req) {
 
                 // for supporting of callback function invocation by server
@@ -915,7 +915,7 @@ function Router(options) {
 
     self.frontend.on('connect', function(address, uuid, stream) {
         _.each(self.backend.streams, function(e, i) {
-            self.frontend.dispatch({ op : 'rpc::online', uuid : i });
+            self.frontend.dispatch(uuid, { op : 'rpc::online', uuid : i });
         });
 
         self.backend.dispatch({ op : 'rpc::online', uuid : uuid });
@@ -927,7 +927,7 @@ function Router(options) {
 
     self.backend.on('connect', function(address, uuid, stream) {
         _.each(self.frontend.streams, function(e, i) {
-            self.backend.dispatch({ op : 'rpc::online', uuid : i });
+            self.backend.dispatch(uuid, { op : 'rpc::online', uuid : i });
         });
 
         self.frontend.dispatch({ op : 'rpc::online', uuid : uuid });

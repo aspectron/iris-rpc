@@ -23,15 +23,23 @@ var rpc = new zrpc.Client({
 
 rpc.on('rpc::online', function(cid, stream) {
     console.log('online::', cid);
+
+    // not allow to send message to specific server
+//    rpc.dispatch(cid, {op: 'specific-server-test', data: Date.now(), cid: cid});
+//
+//    rpc.dispatch(cid, {op: 'specific-server-callback-test', data: Date.now(), cid: cid}, function (err, result) {
+//        console.log('Specific server callback test', arguments);
+//    });
 });
 
 rpc.on('connect', function (address, cid, stream) {
     console.log('Connect::', cid);
 
+    // sending message to specific router and his server
     setInterval(function () {
-        rpc.dispatch(cid, {op: 'specific-server-test', data: Date.now()});
+        rpc.dispatch(cid, {op: 'specific-server-test', data: Date.now(), cid: cid});
 
-        rpc.dispatch(cid, {op: 'specific-server-callback-test', data: Date.now()}, function (err, result) {
+        rpc.dispatch(cid, {op: 'specific-server-callback-test', data: Date.now(), cid: cid}, function (err, result) {
             console.log('Specific server callback test', arguments);
         });
     }, 5000);
@@ -46,7 +54,7 @@ rpc.on('disconnect', function (cid, stream) {
 })
 
 rpc.on('client-test', function (msg, cid, stream) {
-    console.log('Client test::', msg);
+    console.log('Client test::', msg, cid);
 })
 
 rpc.on('client-callback-test', function (msg, callback) {
@@ -55,7 +63,7 @@ rpc.on('client-callback-test', function (msg, callback) {
 })
 
 rpc.on('common-opcode', function (msg, cid, stream) {
-    console.log('Common opcode test::', msg);
+    console.log('Common opcode test::', msg, cid);
 })
 
 rpc.on('common-opcode-callback', function (msg, callback) {

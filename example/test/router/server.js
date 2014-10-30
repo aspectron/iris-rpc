@@ -27,9 +27,9 @@ rpc.on('connect', function (address, cid, stream) {
         rpc.dispatch(cid, {op: 'client-test', data: Date.now()});
 
         // not work because cid is router
-        rpc.dispatch(cid, {op: 'client-callback-test', data: Date.now()}, function () {
-            console.log('client-callback-test', arguments);
-        });
+//        rpc.dispatch(cid, {op: 'client-callback-test', data: Date.now()}, function () {
+//            console.log('client-callback-test', arguments);
+//        });
     }, 5000);
 })
 
@@ -50,7 +50,7 @@ rpc.on('disconnect', function (cid, stream) {
 })
 
 rpc.on('server-test', function (msg, cid, stream) {
-    console.log('Server test::', msg);
+    console.log('Server test::', msg, cid);
 })
 
 rpc.on('server-callback-test', function (msg, callback) {
@@ -59,7 +59,7 @@ rpc.on('server-callback-test', function (msg, callback) {
 })
 
 rpc.on('specific-server-test', function (msg, cid, stream) {
-    console.log('Specifics server test::', msg);
+    console.log('Specifics server test::', msg, cid);
 })
 
 rpc.on('specific-server-callback-test', function (msg, callback) {
