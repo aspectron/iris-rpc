@@ -21,8 +21,8 @@ var rpc = new zrpc.Client({
     pingFreq: 3 * 1000
 });
 
-rpc.on('rpc::online', function(address, cid, stream) {
-    console.log('Rpc connect::', address, cid);
+rpc.on('rpc::online', function(cid, stream) {
+    console.log('online::', cid);
 });
 
 rpc.on('connect', function (address, cid, stream) {
@@ -35,6 +35,10 @@ rpc.on('connect', function (address, cid, stream) {
             console.log('Specific server callback test', arguments);
         });
     }, 5000);
+})
+
+rpc.on('rpc::offline', function (cid, stream) {
+    console.log('offline::', cid);
 })
 
 rpc.on('disconnect', function (cid, stream) {

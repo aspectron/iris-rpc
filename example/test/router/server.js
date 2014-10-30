@@ -47,14 +47,6 @@ rpc.on('rpc::offline', function(cid, stream){
 
 rpc.on('disconnect', function (cid, stream) {
     console.log('Disconnect::', cid);
-
-    if (_.size(stream.iface.routes.remote)) {
-        _.each(stream.iface.routes.remote, function(e, i) {
-            if (stream.iface.routes.remote[i].uuid == cid) {
-                self.rpc.emitToListeners('rpc::offline', i);
-            }
-        });
-    }
 })
 
 rpc.on('server-test', function (msg, cid, stream) {

@@ -357,6 +357,15 @@ function Interface(options) {
         delete self.routes.remote[msg.uuid];
     }
 
+    self.on('disconnect', function(uuid, stream) {
+        _.each(stream.iface.routes.remote, function(e, i) {
+            if (stream.iface.routes.remote[i].uuid == uuid) {
+                self.emitToListeners('rpc::offline', i);
+                delete self.routes.remote[i];
+            }
+        });
+    });
+
 	self.on('stream::message', function(msg, stream) {
 
         // if(config.debug)
@@ -905,6 +914,10 @@ function Router(options) {
         throw new Error("zetta-rpc::Router() requires client or server")
 
     self.frontend.on('connect', function(address, uuid, stream) {
+        _.each(self.backend.streams, function(e, i) {
+            self.frontend.dispatch({ op : 'rpc::online', uuid : i });
+        });
+
         self.backend.dispatch({ op : 'rpc::online', uuid : uuid });
     })
 
@@ -913,11 +926,9 @@ function Router(options) {
     })
 
     self.backend.on('connect', function(address, uuid, stream) {
-        if (_.size(self.frontend.streams)) {
-            _.each(self.frontend.streams, function(e, i) {
-                self.backend.dispatch({ op : 'rpc::online', uuid : i });
-            });
-        }
+        _.each(self.frontend.streams, function(e, i) {
+            self.backend.dispatch({ op : 'rpc::online', uuid : i });
+        });
 
         self.frontend.dispatch({ op : 'rpc::online', uuid : uuid });
     })
