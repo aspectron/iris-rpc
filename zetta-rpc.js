@@ -741,22 +741,36 @@ function Server(options, initCallback) {
     if(!options.port)
         throw new Error("zetta-rpc::Server requires port argument");
 
+    var port = options.port;
+    var host = options.host;
+    if(typeof(options.port) == 'string') {
+        var parts = options.port.split(':');
+        if(parts.length != 2)
+            throw new Error("zetta-rpc::Server port string must have 'host:port' format, instead it is: "+options.port);
+        host = parts[0];
+        port = parseInt(parts[1])
+    }
+
     self.tlsServer = tls.createServer(options.certificates, function (tlsStream) {
         if(self.rejectUnauthorized && !stream.authorized)
             return stream.end();
         var stream = new Stream(tlsStream, self);
     });
 
-    self.tlsServer.listen(options.port, function(err) {
+    var args = [ port ];
+    if(host)
+        args.push(host);
+    args.push(function(err) {
         if(err)
             console.error('zetta-rpc server listen error on '+options.port, err);
         self.emitToListeners('server::listen', err);
         initCallback && initCallback(err);
-    });
+    })
+
+    self.tlsServer.listen.apply(self.tlsServer, args);
 
     self.on('stream::error', function(err, stream) {
         stream.tlsStream.end();
-
     })
 
     // self.on('stream::end', function(stream) {
