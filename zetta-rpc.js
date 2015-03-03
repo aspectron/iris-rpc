@@ -64,7 +64,7 @@ function Stream(tlsStream, iface, address) {
 	self.tlsStream = tlsStream;
     self.iface = iface;
 	self.buffer = '';
-    self.address = tlsStream.socket.remoteAddress || address;
+    self.address = tlsStream._host || address;
     self.serverName = tlsStream.servername;
     self.pending = { }
 
@@ -96,6 +96,7 @@ function Stream(tlsStream, iface, address) {
             catch (ex) {
                 console.log(ex.stack);
                 tlsStream.end();
+                break;
             }
             
             idx = self.buffer.indexOf('\n');
@@ -527,7 +528,7 @@ function Interface(options) {
             // msg._req = req_uuid;
             stream.pending[req_uuid] = {
                 uuid : req_uuid,
-                req : msg,
+                req : _msg,
                 callback : callback,
                 ts : Date.now(),
             }
