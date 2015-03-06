@@ -64,7 +64,7 @@ function Stream(tlsStream, iface, address) {
 	self.tlsStream = tlsStream;
     self.iface = iface;
 	self.buffer = '';
-    self.address = tlsStream._host || tlsStream.servername || address;
+    self.address = tlsStream._host || tlsStream.servername || address || 'N/A';
     self.serverName = tlsStream.servername;
     self.pending = { }
 
@@ -329,7 +329,7 @@ function Interface(options) {
 		})
 
 		stream.connected = true;
-        self.emitToListeners('connect', stream.serverName, stream.uuid, stream);
+        self.emitToListeners('connect', stream.address, stream.uuid, stream);
     }
 
     self.iface['rpc::online'] = function(msg, stream) {
