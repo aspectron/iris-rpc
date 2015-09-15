@@ -1,4 +1,4 @@
-# Zetta Toolkit: JSON RPC over TLS
+# IRIS Toolkit: JSON RPC over TLS
 
 This library offers clear-text JSON RPC over TLS with optional second layer encryption.
 
@@ -15,17 +15,17 @@ Authentication is based on user supplied secret keys, so this is as secure as yo
 
 ## Usage
 
-`npm install zetta-rpc`
+`npm install iris-rpc`
 
 
 ### Messaging
 
-Zetta RPC library allows sending of JSON objects between client and server. If these JSON objects contain an opcode (`op` field), they will be emitted to the registered event listeners as well as on the RPC objects themselves (Client, Server and Multiplexer).  If `op` field is missing, `rpc.digest(function(msg) { ... })` must be used to capture transmission of incoming JSON objects.
+IRIS RPC library allows sending of JSON objects between client and server. If these JSON objects contain an opcode (`op` field), they will be emitted to the registered event listeners as well as on the RPC objects themselves (Client, Server and Multiplexer).  If `op` field is missing, `rpc.digest(function(msg) { ... })` must be used to capture transmission of incoming JSON objects.
 
 ### Client
 
 ```javascript
-var zrpc = require('zetta-rpc');
+var zrpc = require('iris-rpc');
 
 var rpc = new zrpc.Client({		// or zrpc.Client() for connection to a single server
     address: "host:port",				// or multiple servers specified as ["host:port",...]  (Multiplexer only)
@@ -61,14 +61,14 @@ zrpc.Multiplexer() and zrpc.Client() provide same initialization interface. Mult
 ### Server
 
 ```javascript
-var zrpc = require('zetta-rpc');
+var zrpc = require('iris-rpc');
 
 var rpc = new zrpc.Server({
 	port : 12345, 						// listening port
 	auth : "user-supplied-secret-key",
     certificates: ...,					// standard node certificates containing 'key', 'cert', 'ca' data
 }, function(err) {
-	console.log('zetta-rpc server is listening for new connections');
+	console.log('iris-rpc server is listening for new connections');
 });
 
 // client connection event: cid is a unique remote end-point identifier (built from designation+node)
@@ -112,6 +112,6 @@ var router = zrpc.Router({
 
 ### License
 
-This library is a part of Zetta Toolkit, released under MIT license.  
+This library is a part of IRIS Toolkit, released under MIT license.  
 Copyright (c) 2014 ASPECTRON Inc.  
 All Rights Reserved.

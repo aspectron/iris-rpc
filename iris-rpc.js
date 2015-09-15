@@ -1,5 +1,5 @@
 //
-// -- Zetta Toolkit - JSON Interface over TLS
+// -- IRIS Toolkit - JSON Interface over TLS
 //
 //  Copyright (c) 2014 ASPECTRON Inc.
 //  All Rights Reserved.
@@ -108,14 +108,14 @@ function Stream(tlsStream, iface, address) {
     	iface.connectionCount--;
 //        if(config.verbose)
         if(config.verbose || err.code != 'ECONNREFUSED')
-            console.log("zetta-rpc tls stream error:", err/*.message*/, ' | ' ,self.iface.designation+'@'+self.address);
+            console.log("iris-rpc tls stream error:", err/*.message*/, ' | ' ,self.iface.designation+'@'+self.address);
     	iface.emit('stream::error', err, self);
     });
 
     tlsStream.on('end', function () {
     	iface.connectionCount--;
         if(config.verbose)
-            console.log("zetta-rpc tls stream end");
+            console.log("iris-rpc tls stream end");
         iface.emit('stream::end', self)
     });
 
@@ -146,13 +146,13 @@ function Interface(options) {
     events.EventEmitter.call(this);
 
     if(!options.certificates)
-        throw new Error("zetta-rpc options - missing 'certificates' argument");
+        throw new Error("iris-rpc options - missing 'certificates' argument");
     if(!options.auth && !options.secret)
-        throw new Error("zetta-rpc options - missing 'auth' argument");
+        throw new Error("iris-rpc options - missing 'auth' argument");
     if(!options.uuid)
-        throw new Error("zetta-rpc options - missing 'uuid' argument");
+        throw new Error("iris-rpc options - missing 'uuid' argument");
 //    if(!options.mac)
-//        throw new Error("zetta-rpc options - mac is required");
+//        throw new Error("iris-rpc options - mac is required");
 // console.log("UUID".bold,options.uuid);
 
     // console.log("Creating RPC instance:".green.bold, options);
@@ -196,7 +196,7 @@ function Interface(options) {
 
         var vector = msg.vector;
         if(!vector) {
-            console.log("zetta-rpc: no vector in auth message");
+            console.log("iris-rpc: no vector in auth message");
             stream.end();
             return;
         }
@@ -242,7 +242,7 @@ function Interface(options) {
 
             var data = msg.data;
             if(!data) {
-                console.log("zetta-rpc auth packet missing data (peer at "+stream.address+"):", msg);
+                console.log("iris-rpc auth packet missing data (peer at "+stream.address+"):", msg);
                 stream.end();
                 return;
             }
@@ -256,14 +256,14 @@ function Interface(options) {
 
 
             if(!data.uuid || !data.auth) {
-                console.log("zetta-rpc auth packet missing auth, uuid or designation (peer at "+stream.address+"):", data);
+                console.log("iris-rpc auth packet missing auth, uuid or designation (peer at "+stream.address+"):", data);
                 stream.end();
                 return;
             }
 
             var auth = crypto.createHmac('sha256', self.pk).update(stream.vector).digest('hex');
             if(auth != data.auth) {
-                console.log("zetta-rpc auth failure:", data);
+                console.log("iris-rpc auth failure:", data);
                 stream.end();
                 return;
             }
@@ -352,7 +352,7 @@ function Interface(options) {
             var sig = crypto.createHmac('sha256', self.pk).update(stream.sequenceRX+'').digest('hex').substring(0, 16);
             if(msg._sig != sig) {
                 console.log("should be ",sig,"is",msg._sig);
-                console.log("zetta-rpc signature failure:", msg);
+                console.log("iris-rpc signature failure:", msg);
                 stream.end();
                 return;
             }
@@ -366,7 +366,7 @@ function Interface(options) {
         }
         else
         if(!stream.uuid) {
-            console.log("zetta-rpc foreign connection "+stream.address+", closing");
+            console.log("iris-rpc foreign connection "+stream.address+", closing");
             stream.end();
             return;
         }
@@ -472,7 +472,7 @@ function Interface(options) {
                     delete stream.pending[msg._resp];
                 }
                 else {
-                    console.error('zetta-rpc: no pending callback for response:'.magenta.bold, msg);
+                    console.error('iris-rpc: no pending callback for response:'.magenta.bold, msg);
                 }
             }
             else
@@ -483,7 +483,7 @@ function Interface(options) {
             }
 
         } catch(ex) {
-            console.error("zetta-rpc: error while processing message".magenta.bold);
+            console.error("iris-rpc: error while processing message".magenta.bold);
             console.error(ex.stack);
             self.emitToListeners('rpc::error', ex, msg);
         }
@@ -513,7 +513,7 @@ function Interface(options) {
             try {
                 listener.emit.apply(listener, args);
             } catch(ex) {
-                console.error("zetta-rpc: error while processing message".magenta.bold);
+                console.error("iris-rpc: error while processing message".magenta.bold);
                 console.error(ex.stack);
                 self.emitToListeners('rpc::error', ex);
             }
@@ -589,14 +589,14 @@ function Interface(options) {
             // console.log(("dispatching to stream "+uuid).cyan.bold+("  op: "+msg.op).bold+" (single)");
     		var stream = self.streams[uuid];
     		if(!stream) {
-	            console.error('zetta-rpc: no such stream present:'.magenta.bold, uuid);
-	            callback && callback(new Error("zetta-rpc: no such stream present"))
+	            console.error('iris-rpc: no such stream present:'.magenta.bold, uuid);
+	            callback && callback(new Error("iris-rpc: no such stream present"))
 	            return;
     		}
 
             if(!msg) {
-                console.error('zetta-rpc: dispatch() got empty message'.magenta.bold);
-                callback && callback(new Error("zetta-rpc: no such stream present"))
+                console.error('iris-rpc: dispatch() got empty message'.magenta.bold);
+                callback && callback(new Error("iris-rpc: no such stream present"))
             }
             else
             	self.dispatchToStream(stream, msg, callback);
@@ -675,7 +675,7 @@ function Client(options) {
 	Interface.call(this, options);
 
     if(!options.address)
-        throw new Error("zetta-rpc::Client requires address argument");
+        throw new Error("iris-rpc::Client requires address argument");
 
 	if(_.isArray(options.address)) {
 		_.each(options.address, function(address) {
@@ -690,7 +690,7 @@ function Client(options) {
 	    var addr = address.split(':');
 
 	    if(config.verbose)
-	        console.log("zetta-rpc connecting to address:", address);
+	        console.log("iris-rpc connecting to address:", address);
 
 	    var tlsOptions = { }
 	    tlsOptions.host = addr[0];
@@ -700,7 +700,7 @@ function Client(options) {
 
         self.auth = false;
         var tlsStream = tls.connect(tlsOptions, function () {
-            console.log('zetta-rpc '+self.designation+' connected to server @'+address+', SSL certificate is', tlsStream.authorized ? 'authorized' : 'unauthorized');
+            console.log('iris-rpc '+self.designation+' connected to server @'+address+', SSL certificate is', tlsStream.authorized ? 'authorized' : 'unauthorized');
             if(self.rejectUnauthorized && !tlsStream.authorized)
                 return tlsStream.end();
 
@@ -739,14 +739,14 @@ function Server(options, initCallback) {
 	Interface.call(this, options);
 
     if(!options.port)
-        throw new Error("zetta-rpc::Server requires port argument");
+        throw new Error("iris-rpc::Server requires port argument");
 
     var port = options.port;
     var host = options.host;
     if(typeof(options.port) == 'string') {
         var parts = options.port.split(':');
         if(parts.length != 2)
-            throw new Error("zetta-rpc::Server port string must have 'host:port' format, instead it is: "+options.port);
+            throw new Error("iris-rpc::Server port string must have 'host:port' format, instead it is: "+options.port);
         host = parts[0];
         port = parseInt(parts[1])
     }
@@ -762,7 +762,7 @@ function Server(options, initCallback) {
         args.push(host);
     args.push(function(err) {
         if(err)
-            console.error('zetta-rpc server listen error on '+options.port, err);
+            console.error('iris-rpc server listen error on '+options.port, err);
         self.emitToListeners('server::listen', err);
         initCallback && initCallback(err);
     })
@@ -852,7 +852,7 @@ function Router(options) {
         })
     }
     else
-        throw new Error("zetta-rpc::Router() requires client or server")
+        throw new Error("iris-rpc::Router() requires client or server")
 
     self.frontend.on('connect', function(address, uuid, stream) {
         self.backend.dispatch({ op : 'rpc::online', uuid : uuid });

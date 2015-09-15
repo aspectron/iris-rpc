@@ -1,5 +1,5 @@
 var fs = require('fs');
-var zrpc = require('../zetta-rpc');
+var zrpc = require('../iris-rpc');
 
 function Server() {
 	var self = this;

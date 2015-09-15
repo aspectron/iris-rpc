@@ -1,6 +1,6 @@
 {
-  "name": "zetta-rpc",
-  "description": "Zetta Toolkit - JSON RPC over TLS",
+  "name": "iris-rpc",
+  "description": "IRIS Toolkit - JSON RPC over TLS",
   "version": "0.2.15",
   "author": {
     "name": "ASPECTRON Inc.",
@@ -16,15 +16,15 @@
     "framework",
     "json",
     "rpc",
-    "zetta"
+    "iris"
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/aspectron/zetta-rpc"
+    "url": "git://github.com/aspectron/iris-rpc"
   },
-  "main": "zetta-rpc",
+  "main": "iris-rpc",
   "files": [
-    "zetta-rpc.js",
+    "iris-rpc.js",
     "README.md",
     "example/client.js",
     "example/server.js",
@@ -43,8 +43,8 @@
   },
   "readmeFilename": "README.md",
   "bugs": {
-    "url": "https://github.com/aspectron/zetta-rpc/issues"
+    "url": "https://github.com/aspectron/iris-rpc/issues"
   },
   "license": "MIT",
-  "homepage": "https://github.com/aspectron/zetta-rpc"
+  "homepage": "https://github.com/aspectron/iris-rpc"
 }

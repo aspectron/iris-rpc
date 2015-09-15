@@ -1,5 +1,5 @@
 {
-    "name": "zetta-rpc-example",
+    "name": "iris-rpc-example",
     "version": "0.0.1",
     "dependencies": {
         "colors": "*",

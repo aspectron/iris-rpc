@@ -3,7 +3,7 @@ var events = require('events');
 var util = require('util');
 var fs = require('fs');
 var getmac = require('getmac');
-var zrpc = require('../zetta-rpc');
+var zrpc = require('../iris-rpc');
 
 function Server(mac) {
 	var self = this;
