@@ -808,11 +808,24 @@ function Multiplexer(options, config, rpcTitle) {
         })
     }
 
-    self.dispatch = function() {
+    self.dispatch = function(uuid, msg, callback) {
         var args = arguments;
-        _.each(self.links, function(rpc) {
-            rpc.dispatch.apply(rpc, args);
-        })
+        if (_.isObject(uuid)){
+             _.each(self.links, function(rpc) {
+                rpc.dispatch.apply(rpc, args);
+            })
+            return
+        }
+
+        var rpc = _.find( self.links, function(s){
+            return !!s.streams[uuid];
+        });
+        if (!rpc){
+            console.error('iris-rpc: no such stream present:'.magenta.bold, uuid);
+            callback && callback(new Error("iris-rpc: no such stream present"))
+            return;
+        }
+        rpc.dispatch.apply(rpc, args);
     }
 }
 
