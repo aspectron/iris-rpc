@@ -808,29 +808,24 @@ function Multiplexer(options, config, rpcTitle) {
         })
     }
 
-    self.dispatch = function(uuid) {
-        var args = Array.prototype.slice.apply(arguments);
-        var invoked = false;
-        _.each(self.links, function(rpc) {
-
-            if(_.isObject(uuid)) {
+    self.dispatch = function(uuid, msg, callback) {
+        var args = arguments;
+        if (_.isObject(uuid)){
+             _.each(self.links, function(rpc) {
                 rpc.dispatch.apply(rpc, args);
-                invoked = true;
-            }
-            else
-            if(rpc.streams[uuid]) {
-                rpc.dispatch.apply(rpc, args);
-                invoked = true;
-            }
-        })
-
-        if(!invoked) {
-            callback = args.pop();
-            if(_.isFunction(callback)) {
-                console.error('iris-rpc: no such stream present:'.magenta.bold, uuid);
-                callback(new Error("iris-rpc: no such stream present"))
-            }
+            })
+            return
         }
+
+        var rpc = _.find( self.links, function(s){
+            return !!s.streams[uuid];
+        });
+        if (!rpc){
+            console.error('iris-rpc: no such stream present:'.magenta.bold, uuid);
+            callback && callback(new Error("iris-rpc: no such stream present"))
+            return;
+        }
+        rpc.dispatch.apply(rpc, args);
     }
 }
 
