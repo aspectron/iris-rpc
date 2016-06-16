@@ -1,7 +1,7 @@
 {
   "name": "iris-rpc",
   "description": "IRIS Toolkit - JSON RPC over TLS",
-  "version": "0.2.15",
+  "version": "0.2.16",
   "author": {
     "name": "ASPECTRON Inc.",
     "email": "info@aspectron.com"
