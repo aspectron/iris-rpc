@@ -39,7 +39,7 @@ if(!GLOBAL.dpc)
 var RPC_VERSION = 1;
 
 var config = {
-    verbose : false,
+    verbose : 1,    // 0 = suppress; 1 = basic; 2 = full
     cipher : true,
     debug : false
 }
@@ -107,14 +107,14 @@ function Stream(tlsStream, iface, address) {
     tlsStream.on('error', function (err) {
     	iface.connectionCount--;
 //        if(config.verbose)
-        if(config.verbose || err.code != 'ECONNREFUSED')
+        if(config.verbose > 1 || config.verbose && err.code != 'ECONNREFUSED')
             console.log("iris-rpc tls stream error:", err/*.message*/, ' | ' ,self.iface.designation+'@'+self.address);
     	iface.emit('stream::error', err, self);
     });
 
     tlsStream.on('end', function () {
     	iface.connectionCount--;
-        if(config.verbose)
+        if(config.verbose > 1)
             console.log("iris-rpc tls stream end");
         iface.emit('stream::end', self)
     });
@@ -689,7 +689,7 @@ function Client(options) {
 
 	    var addr = address.split(':');
 
-	    if(config.verbose)
+	    if(config.verbose > 1)
 	        console.log("iris-rpc connecting to address:", address);
 
 	    var tlsOptions = { }
@@ -808,11 +808,29 @@ function Multiplexer(options, config, rpcTitle) {
         })
     }
 
-    self.dispatch = function() {
-        var args = arguments;
+    self.dispatch = function(uuid) {
+        var args = Array.prototype.slice.apply(arguments);
+        var invoked = false;
         _.each(self.links, function(rpc) {
-            rpc.dispatch.apply(rpc, args);
+
+            if(_.isObject(uuid)) {
+                rpc.dispatch.apply(rpc, args);
+                invoked = true;
+            }
+            else
+            if(rpc.streams[uuid]) {
+                rpc.dispatch.apply(rpc, args);
+                invoked = true;
+            }
         })
+
+        if(!invoked) {
+            callback = args.pop();
+            if(_.isFunction(callback)) {
+                console.error('iris-rpc: no such stream present:'.magenta.bold, uuid);
+                callback(new Error("iris-rpc: no such stream present"))
+            }
+        }
     }
 }
 
