@@ -1,5 +1,7 @@
 # IRIS Framework - JSON RPC over TLS
 
+[![license:mit](https://img.shields.io/badge/license-mit-blue.svg)](https://opensource.org/licenses/MIT)
+
 IRIS-RPC is a part of [IRIS Framework](https://github.com/aspectron/iris-app).
 
 #### Security Features:
