@@ -1,6 +1,6 @@
-# IRIS Toolkit: JSON RPC over TLS
+# IRIS - JSON RPC over TLS
 
-This library offers clear-text JSON RPC over TLS with optional second layer encryption.
+IRIS-RPC is a part of [IRIS Framework](https://github.com/aspectron/iris-app).
 
 #### Security Features:
 
@@ -11,7 +11,6 @@ This library offers clear-text JSON RPC over TLS with optional second layer encr
 
 Authentication is based on user supplied secret keys, so this is as secure as your host.
 
-**This library is currently under development & testing. Until this message is removed, use at your own risk!**
 
 ## Usage
 
@@ -25,14 +24,14 @@ IRIS RPC library allows sending of JSON objects between client and server. If th
 ### Client
 
 ```javascript
-var zrpc = require('iris-rpc');
+var irisRPC = require('iris-rpc');
 
-var rpc = new zrpc.Client({		// or zrpc.Client() for connection to a single server
-    address: "host:port",				// or multiple servers specified as ["host:port",...]  (Multiplexer only)
-    auth: "user-supplied-secret-key",
-    certificates: ...,					// standard node certificates containing 'key', 'cert', 'ca' data
-    node: "...",  						// id of this node instance (typically host mac address)
-    designation: 'user-application-id',	// name of the application (used to differentiate connections coming from the same host)
+var rpc = new irisRPC.Client({		// or zrpc.Client() for connection to a single server
+    address: "host:port",				
+    auth: "user-supplied-secret-key",   // must match opposite side
+    certificates: ...,					// standard node certificates containing 'key', 'cert', 'ca' data, typically core.certificates
+    uuid: "...",  						// uuid of the node, typically core.uuid
+    designation: 'user-application-id',	// named identifier that is available during connection on the opposite side
     ping: true,							// optional: enable automatic server ping (see Client::setPingDataObject())
     pingFreq : 3 * 1000,				// optional: ping frequency (default 3 seconds)
     pingDataObject : ...,				// this object will be transmitted during ping
@@ -52,18 +51,17 @@ eventEmitter.on('user-message', function(msg, rpc) { ... })
 // send messages or JSON objects
 rpc.dispatch({ op : 'user-message ', ... })	
 
-// receive JSON
+// receive each message as JSON
 rpc.digest(function(msg, rpc) { ... })
 
 ```
-zrpc.Multiplexer() and zrpc.Client() provide same initialization interface. Multiplexer, however, supports an array of addresses allowing client to connect to multiple servers simultaneously.
 
 ### Server
 
 ```javascript
-var zrpc = require('iris-rpc');
+var irisRPC = require('iris-rpc');
 
-var rpc = new zrpc.Server({
+var rpc = new irisRPC.Server({
 	port : 12345, 						// listening port
 	auth : "user-supplied-secret-key",
     certificates: ...,					// standard node certificates containing 'key', 'cert', 'ca' data
@@ -87,31 +85,67 @@ rpc.dispatch(cid, { op : 'user-message' })
 rpc.digest(function(msg, cid, stream) { ... })
 ```
 
-### Router
+### Multiplexer
 
-If the number of sockets on the system running as a Server is limited, 
-Router can be used to create multiple fron-ends that will accept incoming
-connections and exchange message between these connection and the server.
-For example: if a server is limited to 10 connections, having 10 routers would
-allow to scale socket limit to 100 (this refers to ulimit settings that can)
-impact systems when there are a lot of external connections.
+Multiplexer allows creation of a single RPC interface that can combine multiple Client and/or Server RPC instances while providing a common interface for message dispatch and reception.
 
-Router allows creation of multiple front-ends for the Server is the number of socket
+When configuring multiplexer, arguments are supplied as follows:
+* RPC parameters (passed on to underlying Client and Server instances)
+* List of connectsions
+* Verbose title of the RPC link
+
+If list of connections contains `port` key, Multiplexer will create an underlying Server instance, for `address` key, it will create underlying Client instance.
 
 ```javascript
+
+var connectionList = {
+    client1 : {
+        address : "<ip>:<port>",
+        auth : "<auth-string-matching-opposite-side>"
+    },
+    client2 : {
+        address : "<ip>:<port>",
+        auth : "<auth-string-matching-opposite-side>"
+    },
+    server1 : {
+        address : <port>,
+        auth : "<auth-string-matching-opposite-side>"
+    },
+    server2 : {
+        address : <port>,
+        auth : "<auth-string-matching-opposite-side>"
+    },
+    ...
+}
+
+self.rpc = new irisRPC.Multiplexer({
+    uuid : core.uuid,
+    certificates: core.certificates,
+    designation: '<rpc-link-identification>',
+}, connectionList, "RPC TITLE");
+
+```
+
+### Router
+
+Router interface is designed for large-scale systems that require a lot of
+simultaneous connections.  Linux systems are by default configured to allow between 128 
+and 1024 simultaneous TCP connections.  This number can be increased, but ultimately
+you may need to scale horizontally using additional servers.
+
+Router acts as a message relay between Server and Client.
+
+Example:
+```javascript
 var router = zrpc.Router({
-	port : 6699,
-	auth : "f72d7c54d7354f7a8f9d111c6033b6281e7096acc4dcb198763a4555f264259d",
-	certificates : self.certificates,
-	client : {
+	port : 6699,                       // Server instance configuration
+	auth : "172d7c54d7354f7a1f9d161c6033b6281e7096acc4dcb198763a4555f264259d",
+	certificates : core.certificates,
+	client : {                         // Client instance configuration
 		address : "127.0.0.1:4488",
-		node : mac
+        auth : "172d7c54d7354f7a1f9d161c6033b6281e7096acc4dcb198763a4555f264259d",
+		uuid : self.uuid
 	}
 })
 ```
 
-### License
-
-This library is a part of IRIS Toolkit, released under MIT license.  
-Copyright (c) 2014 ASPECTRON Inc.  
-All Rights Reserved.
