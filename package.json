@@ -1,15 +1,15 @@
 {
   "name": "iris-rpc",
-  "description": "IRIS Toolkit - JSON RPC over TLS",
-  "version": "0.2.16",
+  "description": "JSON RPC over TLS",
+  "version": "0.2.17",
   "author": {
     "name": "ASPECTRON Inc.",
     "email": "info@aspectron.com"
   },
   "dependencies": {
-    "underscore" : "*",
-    "node-uuid" : "*",
-    "colors" : "*"
+    "colors": "*",
+    "node-uuid": "^1.4.7",
+    "underscore": "^1.8.3"
   },
   "keywords": [
     "utilities",
