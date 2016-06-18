@@ -1,4 +1,4 @@
-# IRIS - JSON RPC over TLS
+# IRIS Framework - JSON RPC over TLS
 
 IRIS-RPC is a part of [IRIS Framework](https://github.com/aspectron/iris-app).
 
