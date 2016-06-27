@@ -108,7 +108,7 @@ function Stream(tlsStream, iface, address) {
     	iface.connectionCount--;
 //        if(config.verbose)
         if(config.verbose > 1 || config.verbose && err.code != 'ECONNREFUSED')
-            console.log("iris-rpc tls stream error:", err/*.message*/, ' | ' ,self.iface.designation+'@'+self.address);
+            console.log("iris-rpc tls stream error:", err.toString()/*.message*/, ' | ' ,self.iface.designation+'@'+self.address);
     	iface.emit('stream::error', err, self);
     });
 
@@ -530,7 +530,7 @@ function Interface(options) {
                 uuid : req_uuid,
                 req : _msg,
                 callback : callback,
-                ts : Date.now(),
+                ts : Date.now()
             }
 
             msg = {
@@ -649,7 +649,8 @@ function Interface(options) {
         var purge = [ ]
         _.each(self.streams, function(stream) {
             _.each(stream.pending, function(pending, uuid) {
-                if(ts - pending.ts > self.timeout) {
+                var timeout = pending.req.op_timeout || self.timeout;
+                if(ts - pending.ts > timeout) {
                     pending.callback.call(self, { error : "Connection Timed Out", timeout : self.timeout, req : pending.req } );
                     purge.push({ stream : stream, uuid : uuid });
                 }

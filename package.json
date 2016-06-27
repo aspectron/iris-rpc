@@ -1,7 +1,7 @@
 {
   "name": "iris-rpc",
   "description": "JSON RPC over TLS",
-  "version": "0.2.17",
+  "version": "0.2.18",
   "author": {
     "name": "ASPECTRON Inc.",
     "email": "info@aspectron.com"
