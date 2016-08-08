@@ -59,4 +59,4 @@ function Server() {
 	})
 }
 
-GLOBAL.application = new Server();
+global.application = new Server();

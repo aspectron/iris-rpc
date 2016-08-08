@@ -192,7 +192,7 @@ getmac.getMac(function (err, mac) {
         throw err;
 
     mac = mac.split(process.platform == 'win32' ? '-' : ':').join('').toLowerCase();
-    GLOBAL.application = {
+    global.application = {
     	server : new Server(mac),
     	client : new Client(mac),
     }

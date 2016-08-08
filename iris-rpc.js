@@ -33,8 +33,8 @@ var events = require('events');
 var util = require('util');
 var UUID = require('node-uuid');
 
-if(!GLOBAL.dpc)
-    GLOBAL.dpc = function(t,fn) { if(typeof(t) == 'function') setTimeout(t,0); else setTimeout(fn,t); }
+if(!global.dpc)
+    global.dpc = function(t,fn) { if(typeof(t) == 'function') setTimeout(t,0); else setTimeout(fn,t); }
 
 var RPC_VERSION = 1;
 
@@ -459,7 +459,7 @@ function Interface(options) {
 
                         var err = msg.err;
                         if(err && err._Error) {
-                            err = GLOBAL[msg.err.name] ? new GLOBAL[msg.err.name](msg.err.message) : new Error(msg.err.message);
+                            err = global[msg.err.name] ? new global[msg.err.name](msg.err.message) : new Error(msg.err.message);
                             err.stack = msg.err.stack;
                         }
 
