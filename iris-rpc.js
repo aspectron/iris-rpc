@@ -281,7 +281,7 @@ function Interface(options) {
 
         }
         catch(ex) {
-            console.log("generic failure during auth:", ex.stack);
+            console.log("generic failure during auth:", ex.toString());
             stream.end();
             return;
         }
@@ -936,11 +936,88 @@ function createFromConfig(options, config, rpcTitle) {
     }
 }
 
+
+function Certificates(certificates) {
+    var self = this;
+
+    function locateCertificateFile(filename, ignore) {
+        var file = filename;
+        var parts = file.split('.');
+        parts.splice(parts.length-1, 0, '.local');
+        var local = parts.join();
+        if(fs.existsSync(local))
+            return local;
+        if(!ignore && !fs.existsSync(file)) {
+            console.log("Unable to locate certificate file:".red.bold, file.bold);
+            throw new Error("Unable to locate certificate file");
+        }
+        else
+        if(ignore && !fs.existsSync(file))
+            return null;
+
+        return file;
+    }
+
+
+    self.initCertificates = function(callback) {
+        if(self.verbose)
+            console.log('iris-app: loading certificates from ', certificates);
+        if(self.certificateData) {
+            console.error("Warning! initCertificates() is called twice!");
+            callback && callback();
+            return;
+        }
+
+        var ca_chain;
+        if(typeof(certificates) == 'string') {
+
+            self.certificateData = {
+                key: fs.readFileSync(locateCertificateFile(certificates+'.key')).toString(),
+                cert: fs.readFileSync(locateCertificateFile(certificates+'.crt')).toString(),
+                ca: [ ]
+            }
+
+            ca_chain = certificates+'.ca';
+        }
+        else
+        {
+            self.certificateData = {
+                key: fs.readFileSync(locateCertificateFile(certificates.key)).toString(),
+                cert: fs.readFileSync(locateCertificateFile(certificates.crt)).toString(),
+                ca: [ ]
+            }
+
+            ca_chain = certificates.ca;
+        }
+
+        if(ca_chain) {
+
+            var ca_chain_file = locateCertificateFile(ca_chain, true);
+
+            if(ca_chain_file) {
+
+                var cert = [ ]
+                var chain = fs.readFileSync(ca_chain_file).toString().split('\n');
+                _.each(chain, function(line) {
+                    cert.push(line);
+                    if(line.match('/-END CERTIFICATE-/')) {
+                        self.certificateData.ca.push(cert.join('\n'));
+                        cert = [ ]
+                    }
+                })
+            }
+        }
+
+        callback && callback();
+    }
+}
+
 module.exports = {
-	Client : Client,
-	Server : Server,
-    Multiplexer : Multiplexer,
-    Router : Router,
-    createFromConfig : createFromConfig,
-    config : config
+	Client,
+	Server,
+    Multiplexer,
+    Router,
+    createFromConfig,
+    config,
+    Certificates
 }
